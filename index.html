@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Přihlášení – TaskManager</title>
+  <link rel="icon" href="img/logo.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="login-page">
+
+  <div class="login-container">
+    <div class="login-card">
+      <div class="login-logo">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="10" fill="#4F46E5"/>
+          <path d="M12 20l6 6 10-12" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <h1>TaskManager</h1>
+      </div>
+
+      <form id="login-form">
+        <div class="form-group">
+          <label for="username">Uživatelské jméno</label>
+          <input type="text" id="username" placeholder="tomas" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label for="password">Heslo</label>
+          <input type="password" id="password" autocomplete="current-password" required>
+        </div>
+        <div id="login-error" class="form-error hidden"></div>
+        <button type="submit" class="btn btn-primary btn-full" id="login-btn">Přihlásit se</button>
+      </form>
+
+      <div class="login-footer">
+        <button class="btn-link" onclick="showResetForm()">Zapomenuté heslo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reset hesla dialog -->
+  <div id="reset-overlay" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <h2>Obnovení hesla</h2>
+      <p class="text-muted">Zadejte vaše uživatelské jméno. Na váš email pošleme odkaz pro reset hesla.</p>
+      <div class="form-group">
+        <label for="reset-username">Uživatelské jméno</label>
+        <input type="text" id="reset-username" placeholder="tomas">
+      </div>
+      <div id="reset-error" class="form-error hidden"></div>
+      <div id="reset-success" class="form-success hidden">Email odeslán! Zkontrolujte schránku.</div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="hideResetForm()">Zrušit</button>
+        <button class="btn btn-primary" id="reset-btn" onclick="submitReset()">Odeslat email</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    // Pokud je session → rovnou na dashboard
+    redirectIfLoggedIn()
+
+    document.getElementById('login-form').addEventListener('submit', async e => {
+      e.preventDefault()
+      const btn = document.getElementById('login-btn')
+      const errEl = document.getElementById('login-error')
+      errEl.classList.add('hidden')
+      setLoading(btn, true)
+
+      try {
+        const username = document.getElementById('username').value
+        const password = document.getElementById('password').value
+        await login(username, password)
+        window.location.href = 'dashboard.html'
+      } catch (err) {
+        errEl.textContent = err.message
+        errEl.classList.remove('hidden')
+        setLoading(btn, false)
+      }
+    })
+
+    function showResetForm() {
+      document.getElementById('reset-overlay').classList.remove('hidden')
+      document.getElementById('reset-overlay').classList.add('active')
+    }
+    function hideResetForm() {
+      document.getElementById('reset-overlay').classList.remove('active')
+      document.getElementById('reset-overlay').classList.add('hidden')
+      document.getElementById('reset-error').classList.add('hidden')
+      document.getElementById('reset-success').classList.add('hidden')
+    }
+    async function submitReset() {
+      const btn    = document.getElementById('reset-btn')
+      const errEl  = document.getElementById('reset-error')
+      const okEl   = document.getElementById('reset-success')
+      const uname  = document.getElementById('reset-username').value
+      errEl.classList.add('hidden')
+      okEl.classList.add('hidden')
+      setLoading(btn, true)
+      try {
+        await requestPasswordReset(uname)
+        okEl.classList.remove('hidden')
+      } catch (err) {
+        errEl.textContent = err.message
+        errEl.classList.remove('hidden')
+      }
+      setLoading(btn, false)
+    }
+
+    function setLoading(btn, loading) {
+      if (loading) {
+        btn.dataset.originalText = btn.textContent
+        btn.disabled = true
+        btn.textContent = 'Načítám…'
+      } else {
+        btn.disabled = false
+        btn.textContent = btn.dataset.originalText || btn.textContent
+      }
+    }
+  </script>
+</body>
+</html>

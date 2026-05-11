@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ke kontrole – Vizualizace</title>
+  <link rel="icon" href="img/logo.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <div id="nav-placeholder"></div>
+
+  <main class="container">
+    <div class="page-header">
+      <div>
+        <h2>Ke kontrole</h2>
+        <p class="text-muted">Úkoly čekající na vaši kontrolu napříč všemi projekty</p>
+      </div>
+    </div>
+
+    <div id="review-container">
+      <div class="loading-state">Načítám…</div>
+    </div>
+  </main>
+
+  <div id="modal-overlay" class="modal-overlay"></div>
+
+  <script src="js/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/review.js"></script>
+</body>
+</html>

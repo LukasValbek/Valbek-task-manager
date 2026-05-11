@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projekt – TaskManager</title>
+  <link rel="icon" href="img/logo.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <div id="nav-placeholder"></div>
+
+  <main class="container">
+    <div id="project-header" class="page-header">
+      <div>
+        <a href="dashboard.html" class="back-link">← Projekty</a>
+        <h2 id="project-name">Načítám…</h2>
+        <p id="project-desc" class="text-muted"></p>
+        <div id="project-filepath"></div>
+      </div>
+      <div id="project-actions"></div>
+    </div>
+
+    <div id="members-bar" class="members-bar"></div>
+
+    <!-- Filtry -->
+    <div class="filter-bar">
+      <select id="filter-user" class="filter-select">
+        <option value="">Všichni uživatelé</option>
+      </select>
+      <select id="filter-status" class="filter-select">
+        <option value="">Všechny stavy</option>
+        <option value="neudělano">Neudělano</option>
+        <option value="rozpracováno">Rozpracováno</option>
+        <option value="připraveno ke kontrole">Ke kontrole</option>
+        <option value="hotovo">Hotovo</option>
+      </select>
+      <select id="filter-priority" class="filter-select">
+        <option value="">Všechny priority</option>
+        <option value="high">Vysoká</option>
+        <option value="medium">Střední</option>
+        <option value="low">Nízká</option>
+      </select>
+      <button class="btn btn-sm btn-secondary" onclick="clearFilters()">Zrušit filtry</button>
+    </div>
+
+    <!-- Seznam úkolů -->
+    <div id="tasks-container">
+      <div class="loading-state">Načítám úkoly…</div>
+    </div>
+  </main>
+
+  <div id="modal-overlay" class="modal-overlay"></div>
+
+  <script src="js/supabase.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/annotate.js"></script>
+  <script src="js/project.js"></script>
+</body>
+</html>
