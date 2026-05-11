@@ -52,7 +52,7 @@ async function requestPasswordReset(username) {
   if (error || !email) throw new Error('Uživatel nenalezen.')
 
   const { error: resetErr } = await db.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin + '/index.html'
+    redirectTo: new URL('index.html', window.location.href).href
   })
   if (resetErr) throw resetErr
 }
