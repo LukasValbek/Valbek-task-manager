@@ -70,7 +70,7 @@ async function loadProjectData() {
   // Members bar
   document.getElementById('members-bar').innerHTML = `
     <div class="members-list">
-      ${projectMembers.map(m => avatar(m.name)).join('')}
+      ${projectMembers.map(m => avatar(m.name, false, m.initials)).join('')}
       <span class="members-label">${projectMembers.map(m => esc(m.name)).join(', ')}</span>
     </div>
     ${isAdmin() ? `
@@ -98,7 +98,7 @@ async function renderTasks() {
 
   const { data: tasks, error } = await db
     .from('tasks')
-    .select('*, assigned:assigned_to(id, name), creator:created_by(id, name), updater:updated_by(id, name)')
+    .select('*, assigned:assigned_to(id, name, initials), creator:created_by(id, name), updater:updated_by(id, name)')
     .eq('project_id', projectId)
     .order('due_date', { ascending: true, nullsFirst: false })
 
@@ -169,7 +169,7 @@ function renderTaskList(tasks) {
                 <span class="task-title">${esc(t.title)}</span>
                 ${t.description ? `<span class="task-desc-preview">${esc(t.description.substring(0, 60))}${t.description.length > 60 ? '…' : ''}</span>` : ''}
               </td>
-              <td>${t.assigned ? `${avatar(t.assigned.name, true)} ${esc(t.assigned.name)}` : '<span class="text-muted">–</span>'}</td>
+              <td>${t.assigned ? `${avatar(t.assigned.name, true, t.assigned.initials)} ${esc(t.assigned.name)}` : '<span class="text-muted">–</span>'}</td>
               ${statusTd}${priorTd}${dueTd}${pathTd}
             </tr>
           `

@@ -103,7 +103,7 @@ async function renderGrid() {
 
     const memberIds    = (p.project_members || []).map(m => m.user_id)
     const members      = allProfiles.filter(pr => memberIds.includes(pr.id))
-    const memberAvatars = members.map(m => avatar(m.name)).join('')
+    const memberAvatars = members.map(m => avatar(m.name, false, m.initials)).join('')
 
     const overdue  = p.due_date && new Date(p.due_date) < new Date() && p.status !== 'dokončeno'
     const dueLine  = p.due_date

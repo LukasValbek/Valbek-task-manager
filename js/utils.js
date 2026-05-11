@@ -11,11 +11,11 @@ function avatarColor(name) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
 }
 
-function avatar(name, small = false) {
-  const initials = name.slice(0, 2)
-  const color    = avatarColor(name)
-  const cls      = small ? 'avatar avatar-sm' : 'avatar'
-  return `<span class="${cls}" title="${esc(name)}" style="background:${color}">${esc(initials)}</span>`
+function avatar(name, small = false, initials = null) {
+  const text  = initials || name.slice(0, 2)
+  const color = avatarColor(name)
+  const cls   = small ? 'avatar avatar-sm' : 'avatar'
+  return `<span class="${cls}" title="${esc(name)}" style="background:${color}">${esc(text)}</span>`
 }
 
 // ── Formátování ──────────────────────────────────────────────
