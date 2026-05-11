@@ -22,7 +22,7 @@ async function init() {
 async function loadMyTasks() {
   const { data: tasks, error } = await db
     .from('tasks')
-    .select('*, project:project_id(id, name), assigned:assigned_to(id, name, initials), creator:created_by(id, name), updater:updated_by(id, name)')
+    .select('*, project:project_id(id, name), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name)')
     .eq('assigned_to', currentProfile.id)
     .order('due_date', { ascending: true, nullsFirst: false })
 

@@ -3,19 +3,24 @@
 const AVATAR_COLORS = [
   '#4F46E5', '#0891B2', '#059669', '#D97706',
   '#DC2626', '#7C3AED', '#DB2777', '#0284C7',
+  '#65A30D', '#EA580C', '#0D9488', '#9333EA',
+  '#BE185D', '#1D4ED8', '#B45309', '#047857',
 ]
 
 function avatarColor(name) {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+  let hash = 5381
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) + hash) ^ name.charCodeAt(i)
+    hash = hash & 0x7fffffff
+  }
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length]
 }
 
-function avatar(name, small = false, initials = null) {
-  const text  = initials || name.slice(0, 2)
-  const color = avatarColor(name)
-  const cls   = small ? 'avatar avatar-sm' : 'avatar'
-  return `<span class="${cls}" title="${esc(name)}" style="background:${color}">${esc(text)}</span>`
+function avatar(name, small = false, initials = null, color = null) {
+  const text = (initials || name.slice(0, 2)).toUpperCase()
+  const bg   = color || avatarColor(name)
+  const cls  = small ? 'avatar avatar-sm' : 'avatar'
+  return `<span class="${cls}" title="${esc(name)}" style="background:${bg}">${esc(text)}</span>`
 }
 
 // ── Formátování ──────────────────────────────────────────────

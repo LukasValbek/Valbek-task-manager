@@ -17,7 +17,7 @@ async function init() {
 async function loadReviewTasks() {
   const { data, error } = await db
     .from('tasks')
-    .select('*, project:project_id(id, name), assigned:assigned_to(id, name, initials), creator:created_by(id, name)')
+    .select('*, project:project_id(id, name), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name)')
     .eq('status', 'připraveno ke kontrole')
     .order('due_date', { ascending: true, nullsFirst: false })
 
@@ -77,7 +77,7 @@ function renderReview() {
                   ${t.description ? `<span class="task-desc-preview">${esc(t.description.substring(0, 70))}${t.description.length > 70 ? '…' : ''}</span>` : ''}
                 </td>
                 <td>${t.assigned
-                  ? `${avatar(t.assigned.name, true, t.assigned.initials)} ${esc(t.assigned.name)}`
+                  ? `${avatar(t.assigned.name, true, t.assigned.initials, t.assigned.color)} ${esc(t.assigned.name)}`
                   : '<span class="text-muted">–</span>'}</td>
                 <td class="editable-cell" onclick="inlineStatus(event,'${t.id}','${t.status}')" title="Kliknutím změnit">${statusBadge(t.status)}</td>
                 <td class="editable-cell" onclick="inlinePriority(event,'${t.id}','${t.priority}')" title="Kliknutím změnit">${priorityBadge(t.priority)}</td>
