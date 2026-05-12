@@ -328,7 +328,7 @@ input:focus, select:focus, textarea:focus {
   margin-bottom: 32px;
 }
 
-.login-logo h1 { font-size: 22px; color: var(--brand); }
+.login-logo h1 { font-size: 18px; color: var(--brand); line-height: 1.2; }
 
 .login-footer {
   margin-top: 16px;
