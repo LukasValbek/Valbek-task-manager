@@ -98,7 +98,7 @@ async function renderTasks() {
 
   const { data: tasks, error } = await db
     .from('tasks')
-    .select('*, assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name)')
+    .select('*, comments(count), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name)')
     .eq('project_id', projectId)
     .order('due_date', { ascending: true, nullsFirst: false })
 
@@ -146,8 +146,10 @@ function renderTaskList(tasks) {
       </thead>
       <tbody>
         ${tasks.map(t => {
-          const overdue  = isOverdue(t.due_date) && t.status !== 'hotovo'
-          const canEdit  = isAdmin() || t.assigned_to === currentProfile.id
+          const overdue     = isOverdue(t.due_date) && t.status !== 'hotovo'
+          const canEdit     = isAdmin() || t.assigned_to === currentProfile.id
+          const canDelete   = isAdmin() || t.created_by === currentProfile.id
+          const commentCount = t.comments?.[0]?.count ?? 0
           const statusTd = canEdit
             ? `<td class="editable-cell" onclick="inlineStatus(event,'${t.id}','${t.status}')" title="Kliknutím změnit">${statusBadge(t.status)}</td>`
             : `<td>${statusBadge(t.status)}</td>`
@@ -157,16 +159,16 @@ function renderTaskList(tasks) {
           const dueTd    = canEdit
             ? `<td class="editable-cell ${overdue ? 'overdue-text' : ''}" onclick="inlineDueDate(event,'${t.id}','${t.due_date || ''}')" title="Kliknutím změnit">${formatDate(t.due_date)}</td>`
             : `<td class="${overdue ? 'overdue-text' : ''}">${formatDate(t.due_date)}</td>`
-          const pathTd   = t.file_path
-            ? `<td class="col-filepath">
-                 <button class="btn-copy-path" data-path="${esc(t.file_path)}" title="${esc(t.file_path)}"
-                   onclick="event.stopPropagation();copyPath(this.dataset.path)">📋</button>
-               </td>`
-            : `<td class="col-filepath"></td>`
+          const pathTd   = `<td class="col-filepath">
+            ${t.file_path ? `<button class="btn-copy-path" data-path="${esc(t.file_path)}" title="${esc(t.file_path)}"
+                onclick="event.stopPropagation();copyPath(this.dataset.path)">📋</button>` : ''}
+            ${canDelete ? `<button class="btn-icon btn-danger" onclick="event.stopPropagation();deleteTask('${t.id}')" title="Smazat úkol">🗑</button>` : ''}
+          </td>`
           return `
             <tr class="task-row ${overdue ? 'overdue' : ''}" onclick="openTaskDetail('${t.id}')">
               <td class="task-title-cell">
                 <span class="task-title">${esc(t.title)}</span>
+                ${commentCount > 0 ? `<span class="comment-count">💬 ${commentCount}</span>` : ''}
                 ${t.description ? `<span class="task-desc-preview">${esc(t.description.substring(0, 60))}${t.description.length > 60 ? '…' : ''}</span>` : ''}
               </td>
               <td>${t.assigned ? `${avatar(t.assigned.name, true, t.assigned.initials, t.assigned.color)} ${esc(t.assigned.name)}` : '<span class="text-muted">–</span>'}</td>
@@ -285,7 +287,7 @@ async function openTaskDetail(taskId) {
         ${canEdit ? `
           <div id="task-edit-error" class="form-error hidden"></div>
           <div class="modal-actions" style="margin-top:8px">
-            ${isAdmin() ? `<button class="btn btn-danger btn-sm" onclick="deleteTask('${task.id}')">Smazat úkol</button>` : ''}
+            ${isAdmin() || task.created_by === currentProfile.id ? `<button class="btn btn-danger btn-sm" onclick="deleteTask('${task.id}')">Smazat úkol</button>` : ''}
             <button class="btn btn-primary" onclick="saveTaskEdit('${task.id}')">Uložit změny</button>
           </div>
         ` : ''}

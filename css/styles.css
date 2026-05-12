@@ -670,6 +670,12 @@ input:focus, select:focus, textarea:focus {
   color: var(--text-muted);
 }
 
+.comment-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+
 .overdue-text { color: var(--warning); font-weight: 500; }
 
 .editable-cell {
