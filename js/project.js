@@ -10,6 +10,7 @@ const BATCH_SIZE    = 50
 let taskOffset      = 0
 let taskHasMore     = true
 let taskObserver    = null
+let taskLoading     = false
 
 // ── Init ──────────────────────────────────────────────────────
 
@@ -124,6 +125,7 @@ async function renderTasks() {
   const container = document.getElementById('tasks-container')
   taskOffset  = 0
   taskHasMore = true
+  taskLoading = false
   allTasks    = []
   if (taskObserver) { taskObserver.disconnect(); taskObserver = null }
   container.innerHTML = '<div class="loading-state">Načítám úkoly…</div>'
@@ -139,7 +141,7 @@ async function renderTasks() {
   taskOffset  = allTasks.length
   taskHasMore = allTasks.length === BATCH_SIZE
 
-  renderTaskList(allTasks, false)
+  renderTaskList(allTasks)
   if (taskHasMore) setupSentinel()
 }
 
@@ -148,13 +150,15 @@ function applyFilters() {
 }
 
 async function loadMoreTasks() {
-  if (!taskHasMore) return
+  if (!taskHasMore || taskLoading) return
+  taskLoading = true
   if (taskObserver) { taskObserver.disconnect(); taskObserver = null }
 
   const sentinel = document.getElementById('load-more-sentinel')
   if (sentinel) sentinel.innerHTML = '<div class="load-more-indicator"><span class="load-more-spinner"></span>Načítám…</div>'
 
   const { data: tasks, error } = await buildTaskQuery(taskOffset)
+  taskLoading = false
   if (error || !tasks || tasks.length === 0) {
     taskHasMore = false
     if (sentinel) sentinel.remove()
@@ -174,12 +178,8 @@ async function loadMoreTasks() {
 }
 
 function setupSentinel() {
-  let sentinel = document.getElementById('load-more-sentinel')
-  if (!sentinel) {
-    sentinel = document.createElement('div')
-    sentinel.id = 'load-more-sentinel'
-    document.getElementById('tasks-container')?.appendChild(sentinel)
-  }
+  const sentinel = document.getElementById('load-more-sentinel')
+  if (!sentinel) return
   taskObserver = new IntersectionObserver(entries => {
     if (entries[0].isIntersecting) loadMoreTasks()
   }, { rootMargin: '200px' })
@@ -250,7 +250,7 @@ function setupFilters() {
   document.getElementById('filter-user').addEventListener('change', applyFilters)
   document.getElementById('filter-status').addEventListener('change', applyFilters)
   document.getElementById('filter-priority').addEventListener('change', applyFilters)
-  document.getElementById('search-tasks').addEventListener('input', applyFilters)
+  document.getElementById('search-tasks').addEventListener('input', debounce(applyFilters, 300))
 }
 
 function clearFilters() {

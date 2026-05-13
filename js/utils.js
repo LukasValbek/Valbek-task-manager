@@ -227,6 +227,11 @@ function _resolveConfirm(val) {
   if (fn) fn(val)
 }
 
+function debounce(fn, delay) {
+  let timer
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay) }
+}
+
 // ── Escape ────────────────────────────────────────────────────
 
 function esc(str) {
@@ -396,7 +401,6 @@ async function toggleNotifDropdown() {
 async function openNotif(projId, notifId) {
   await db.from('notifications').update({ is_read: true }).eq('id', notifId)
   document.getElementById('notif-dropdown')?.remove()
-  updateNotifBadge(0)
   await loadNotifications()
   if (projId) window.location.href = `project.html#${projId}`
 }

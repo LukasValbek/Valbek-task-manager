@@ -10,7 +10,7 @@ async function init() {
 
   await loadMyTasks()
   document.getElementById('filter-status').addEventListener('change', applyFilters)
-  document.getElementById('search-tasks').addEventListener('input', applyFilters)
+  document.getElementById('search-tasks').addEventListener('input', debounce(applyFilters, 300))
 
   // Realtime: překreslit při změně mých úkolů
   db

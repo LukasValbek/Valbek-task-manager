@@ -624,7 +624,7 @@ input:focus, select:focus, textarea:focus {
   transition: border-color 0.15s;
 }
 .search-input::placeholder { color: var(--text-muted, #999); }
-.search-input:focus { border-color: var(--primary); }
+.search-input:focus { border-color: var(--brand); }
 
 .dashboard-controls {
   display: flex;
