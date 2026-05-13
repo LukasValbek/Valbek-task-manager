@@ -201,13 +201,39 @@ CREATE POLICY "comments_delete" ON comments
   USING (author_id = auth.uid() OR is_admin());
 
 -- ────────────────────────────────────────────────────────────
--- 6. REALTIME – povolit pro tabulky
+-- 6. NOTIFICATIONS
+-- ────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  type       TEXT NOT NULL,
+  message    TEXT NOT NULL,
+  task_id    UUID REFERENCES tasks(id) ON DELETE CASCADE,
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  is_read    BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC);
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "notif_all_own" ON notifications;
+CREATE POLICY "notif_all_own" ON notifications
+  FOR ALL TO authenticated USING (auth.uid() = user_id);
+
+-- Přidat notifications do realtime publikace (spustit samostatně):
+-- ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+
+-- ────────────────────────────────────────────────────────────
+-- 7. REALTIME – povolit pro tabulky
 -- ────────────────────────────────────────────────────────────
 -- Spustit ručně v Supabase Dashboard:
--- Database > Replication > zapnout pro: projects, project_members, tasks, comments
+-- Database > Replication > zapnout pro: projects, project_members, tasks, comments, notifications
 --
 -- Nebo přes SQL (pokud je extension supabase_realtime dostupná):
--- ALTER PUBLICATION supabase_realtime ADD TABLE projects, project_members, tasks, comments;
+-- ALTER PUBLICATION supabase_realtime ADD TABLE projects, project_members, tasks, comments, notifications;
 
 -- ────────────────────────────────────────────────────────────
 -- 7. SEED DATA – 4 uživatelé

@@ -131,7 +131,10 @@ function renderNav(activePage) {
         ${adminItems}
       </div>
       <div class="nav-user">
-        <span>${name}</span>
+        <button class="notif-btn" id="notif-btn" onclick="toggleNotifDropdown()" title="Upozornění">
+          🔔<span id="notif-badge" class="nav-badge hidden"></span>
+        </button>
+        <span>${esc(name)}</span>
         <button class="btn-link" onclick="logout()">Odhlásit</button>
       </div>
     </nav>
@@ -316,6 +319,105 @@ async function inlinePriority(event, taskId, currentPriority) {
     showToast('Priorita uložena.')
   })
   sel.addEventListener('blur', () => { if (!saved) cell.innerHTML = original })
+}
+
+// ── Notifikace ────────────────────────────────────────────────
+
+async function loadNotifications() {
+  const { data } = await db
+    .from('notifications')
+    .select('*')
+    .eq('user_id', currentProfile.id)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  const list = data || []
+  updateNotifBadge(list.filter(n => !n.is_read).length)
+  return list
+}
+
+function updateNotifBadge(count) {
+  const badge = document.getElementById('notif-badge')
+  if (!badge) return
+  if (count > 0) {
+    badge.textContent = count > 9 ? '9+' : count
+    badge.classList.remove('hidden')
+  } else {
+    badge.classList.add('hidden')
+  }
+}
+
+async function toggleNotifDropdown() {
+  const existing = document.getElementById('notif-dropdown')
+  if (existing) { existing.remove(); return }
+
+  const notifications = await loadNotifications()
+
+  const btn = document.getElementById('notif-btn')
+  const dropdown = document.createElement('div')
+  dropdown.id = 'notif-dropdown'
+  dropdown.className = 'notif-dropdown'
+  dropdown.innerHTML = `
+    <div class="notif-header">
+      <strong>Upozornění</strong>
+      ${notifications.some(n => !n.is_read)
+        ? `<button class="btn-link" onclick="markAllNotifsRead()">Přečíst vše</button>`
+        : ''}
+    </div>
+    <div class="notif-list">
+      ${notifications.length === 0
+        ? '<p class="notif-empty">Žádná upozornění.</p>'
+        : notifications.map(n => `
+          <div class="notif-item ${n.is_read ? '' : 'notif-unread'}"
+               data-id="${n.id}"
+               onclick="openNotif('${n.project_id || ''}','${n.id}')">
+            <div class="notif-message">${esc(n.message)}</div>
+            <div class="notif-time">${formatDateTime(n.created_at)}</div>
+          </div>
+        `).join('')}
+    </div>
+  `
+
+  document.body.appendChild(dropdown)
+
+  const rect = btn.getBoundingClientRect()
+  dropdown.style.top  = (rect.bottom + 6) + 'px'
+  dropdown.style.right = (window.innerWidth - rect.right) + 'px'
+
+  setTimeout(() => {
+    document.addEventListener('click', function closeDropdown(e) {
+      if (!dropdown.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+        dropdown.remove()
+        document.removeEventListener('click', closeDropdown)
+      }
+    })
+  }, 0)
+}
+
+async function openNotif(projId, notifId) {
+  await db.from('notifications').update({ is_read: true }).eq('id', notifId)
+  document.getElementById('notif-dropdown')?.remove()
+  updateNotifBadge(0)
+  await loadNotifications()
+  if (projId) window.location.href = `project.html#${projId}`
+}
+
+async function markAllNotifsRead() {
+  await db.from('notifications')
+    .update({ is_read: true })
+    .eq('user_id', currentProfile.id)
+    .eq('is_read', false)
+  document.getElementById('notif-dropdown')?.remove()
+  updateNotifBadge(0)
+}
+
+function initNotifications() {
+  loadNotifications()
+  db.channel('notif-realtime')
+    .on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'notifications',
+      filter: `user_id=eq.${currentProfile.id}`
+    }, () => loadNotifications())
+    .subscribe()
 }
 
 async function inlineDueDate(event, taskId, currentDue) {

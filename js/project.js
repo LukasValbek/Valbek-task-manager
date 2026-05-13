@@ -1,10 +1,15 @@
 let projectId      = null
 let projectData    = null
-let projectMembers = []   // pole profilů členů
+let projectMembers = []
 let allTasks       = []
 let realtimeChannels = []
-let pendingImageBlob     = null  // pro komentáře
-let pendingTaskImageBlob = null  // pro nový úkol
+let pendingImageBlob     = null
+let pendingTaskImageBlob = null
+
+const BATCH_SIZE    = 50
+let taskOffset      = 0
+let taskHasMore     = true
+let taskObserver    = null
 
 // ── Init ──────────────────────────────────────────────────────
 
@@ -18,6 +23,7 @@ async function init() {
 
     document.getElementById('nav-placeholder').innerHTML = renderNav('project')
     initReviewBadge()
+    initNotifications()
 
     await loadProjectData()
     await renderTasks()
@@ -93,35 +99,123 @@ async function loadProjectData() {
 
 // ── Úkoly ─────────────────────────────────────────────────────
 
-async function renderTasks() {
-  const container = document.getElementById('tasks-container')
+function buildTaskQuery(offset) {
+  const filterUser     = document.getElementById('filter-user')?.value || ''
+  const filterStatus   = document.getElementById('filter-status')?.value || ''
+  const filterPriority = document.getElementById('filter-priority')?.value || ''
+  const search         = (document.getElementById('search-tasks')?.value || '').trim()
 
-  const { data: tasks, error } = await db
+  let q = db
     .from('tasks')
     .select('*, comments(count), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name)')
     .eq('project_id', projectId)
     .order('due_date', { ascending: true, nullsFirst: false })
+    .range(offset, offset + BATCH_SIZE - 1)
+
+  if (filterUser)     q = q.eq('assigned_to', filterUser)
+  if (filterStatus)   q = q.eq('status', filterStatus)
+  if (filterPriority) q = q.eq('priority', filterPriority)
+  if (search)         q = q.or(`title.ilike.%${search}%,description.ilike.%${search}%`)
+
+  return q
+}
+
+async function renderTasks() {
+  const container = document.getElementById('tasks-container')
+  taskOffset  = 0
+  taskHasMore = true
+  allTasks    = []
+  if (taskObserver) { taskObserver.disconnect(); taskObserver = null }
+  container.innerHTML = '<div class="loading-state">Načítám úkoly…</div>'
+
+  const { data: tasks, error } = await buildTaskQuery(0)
 
   if (error) {
     container.innerHTML = '<div class="empty-state">Chyba při načítání.</div>'
     return
   }
 
-  allTasks = tasks || []
-  applyFilters()
+  allTasks    = tasks || []
+  taskOffset  = allTasks.length
+  taskHasMore = allTasks.length === BATCH_SIZE
+
+  renderTaskList(allTasks, false)
+  if (taskHasMore) setupSentinel()
 }
 
 function applyFilters() {
-  const filterUser     = document.getElementById('filter-user').value
-  const filterStatus   = document.getElementById('filter-status').value
-  const filterPriority = document.getElementById('filter-priority').value
+  renderTasks()
+}
 
-  let filtered = allTasks
-  if (filterUser)     filtered = filtered.filter(t => t.assigned_to === filterUser)
-  if (filterStatus)   filtered = filtered.filter(t => t.status === filterStatus)
-  if (filterPriority) filtered = filtered.filter(t => t.priority === filterPriority)
+async function loadMoreTasks() {
+  if (!taskHasMore) return
+  if (taskObserver) { taskObserver.disconnect(); taskObserver = null }
 
-  renderTaskList(filtered)
+  const sentinel = document.getElementById('load-more-sentinel')
+  if (sentinel) sentinel.innerHTML = '<div class="load-more-indicator"><span class="load-more-spinner"></span>Načítám…</div>'
+
+  const { data: tasks, error } = await buildTaskQuery(taskOffset)
+  if (error || !tasks || tasks.length === 0) {
+    taskHasMore = false
+    if (sentinel) sentinel.remove()
+    return
+  }
+
+  allTasks    = [...allTasks, ...tasks]
+  taskOffset += tasks.length
+  taskHasMore = tasks.length === BATCH_SIZE
+
+  const tbody = document.getElementById('task-tbody')
+  if (tbody) tbody.insertAdjacentHTML('beforeend', tasks.map(renderTaskRow).join(''))
+
+  if (sentinel) sentinel.innerHTML = ''
+  if (taskHasMore) setupSentinel()
+  else if (sentinel) sentinel.remove()
+}
+
+function setupSentinel() {
+  let sentinel = document.getElementById('load-more-sentinel')
+  if (!sentinel) {
+    sentinel = document.createElement('div')
+    sentinel.id = 'load-more-sentinel'
+    document.getElementById('tasks-container')?.appendChild(sentinel)
+  }
+  taskObserver = new IntersectionObserver(entries => {
+    if (entries[0].isIntersecting) loadMoreTasks()
+  }, { rootMargin: '200px' })
+  taskObserver.observe(sentinel)
+}
+
+function renderTaskRow(t) {
+  const overdue      = isOverdue(t.due_date) && t.status !== 'hotovo'
+  const canEdit      = isAdmin() || t.assigned_to === currentProfile.id
+  const canDelete    = isAdmin() || t.created_by === currentProfile.id
+  const commentCount = t.comments?.[0]?.count ?? 0
+  const statusTd = canEdit
+    ? `<td class="editable-cell" onclick="inlineStatus(event,'${t.id}','${t.status}')" title="Kliknutím změnit">${statusBadge(t.status)}</td>`
+    : `<td>${statusBadge(t.status)}</td>`
+  const priorTd  = canEdit
+    ? `<td class="editable-cell" onclick="inlinePriority(event,'${t.id}','${t.priority}')" title="Kliknutím změnit">${priorityBadge(t.priority)}</td>`
+    : `<td>${priorityBadge(t.priority)}</td>`
+  const dueTd    = canEdit
+    ? `<td class="editable-cell ${overdue ? 'overdue-text' : ''}" onclick="inlineDueDate(event,'${t.id}','${t.due_date || ''}')" title="Kliknutím změnit">${formatDate(t.due_date)}</td>`
+    : `<td class="${overdue ? 'overdue-text' : ''}">${formatDate(t.due_date)}</td>`
+  const pathTd   = `<td class="col-filepath">
+    ${t.file_path ? `<button class="btn-copy-path" data-path="${esc(t.file_path)}" title="${esc(t.file_path)}"
+        onclick="event.stopPropagation();copyPath(this.dataset.path)">📋</button>` : ''}
+    ${canDelete ? `<button class="btn-icon btn-danger" onclick="event.stopPropagation();deleteTask('${t.id}')" title="Smazat úkol">🗑</button>` : ''}
+  </td>`
+  return `
+    <tr class="task-row ${overdue ? 'overdue' : ''}" onclick="openTaskDetail('${t.id}')">
+      <td class="task-title-cell">
+        <span class="task-title">${esc(t.title)}</span>
+        ${commentCount > 0 ? `<span class="comment-count">💬 ${commentCount}</span>` : ''}
+        ${t.description ? `<span class="task-desc-preview">${esc(t.description.substring(0, 60))}${t.description.length > 60 ? '…' : ''}</span>` : ''}
+      </td>
+      <td>${t.assigned ? `${avatar(t.assigned.name, true, t.assigned.initials, t.assigned.color)} ${esc(t.assigned.name)}` : '<span class="text-muted">–</span>'}</td>
+      ${statusTd}${priorTd}${dueTd}${pathTd}
+    </tr>
+  `
 }
 
 function renderTaskList(tasks) {
@@ -144,40 +238,11 @@ function renderTaskList(tasks) {
           <th class="col-filepath" title="Cesta k souboru">📁</th>
         </tr>
       </thead>
-      <tbody>
-        ${tasks.map(t => {
-          const overdue     = isOverdue(t.due_date) && t.status !== 'hotovo'
-          const canEdit     = isAdmin() || t.assigned_to === currentProfile.id
-          const canDelete   = isAdmin() || t.created_by === currentProfile.id
-          const commentCount = t.comments?.[0]?.count ?? 0
-          const statusTd = canEdit
-            ? `<td class="editable-cell" onclick="inlineStatus(event,'${t.id}','${t.status}')" title="Kliknutím změnit">${statusBadge(t.status)}</td>`
-            : `<td>${statusBadge(t.status)}</td>`
-          const priorTd  = canEdit
-            ? `<td class="editable-cell" onclick="inlinePriority(event,'${t.id}','${t.priority}')" title="Kliknutím změnit">${priorityBadge(t.priority)}</td>`
-            : `<td>${priorityBadge(t.priority)}</td>`
-          const dueTd    = canEdit
-            ? `<td class="editable-cell ${overdue ? 'overdue-text' : ''}" onclick="inlineDueDate(event,'${t.id}','${t.due_date || ''}')" title="Kliknutím změnit">${formatDate(t.due_date)}</td>`
-            : `<td class="${overdue ? 'overdue-text' : ''}">${formatDate(t.due_date)}</td>`
-          const pathTd   = `<td class="col-filepath">
-            ${t.file_path ? `<button class="btn-copy-path" data-path="${esc(t.file_path)}" title="${esc(t.file_path)}"
-                onclick="event.stopPropagation();copyPath(this.dataset.path)">📋</button>` : ''}
-            ${canDelete ? `<button class="btn-icon btn-danger" onclick="event.stopPropagation();deleteTask('${t.id}')" title="Smazat úkol">🗑</button>` : ''}
-          </td>`
-          return `
-            <tr class="task-row ${overdue ? 'overdue' : ''}" onclick="openTaskDetail('${t.id}')">
-              <td class="task-title-cell">
-                <span class="task-title">${esc(t.title)}</span>
-                ${commentCount > 0 ? `<span class="comment-count">💬 ${commentCount}</span>` : ''}
-                ${t.description ? `<span class="task-desc-preview">${esc(t.description.substring(0, 60))}${t.description.length > 60 ? '…' : ''}</span>` : ''}
-              </td>
-              <td>${t.assigned ? `${avatar(t.assigned.name, true, t.assigned.initials, t.assigned.color)} ${esc(t.assigned.name)}` : '<span class="text-muted">–</span>'}</td>
-              ${statusTd}${priorTd}${dueTd}${pathTd}
-            </tr>
-          `
-        }).join('')}
+      <tbody id="task-tbody">
+        ${tasks.map(renderTaskRow).join('')}
       </tbody>
     </table>
+    <div id="load-more-sentinel"></div>
   `
 }
 
@@ -185,12 +250,14 @@ function setupFilters() {
   document.getElementById('filter-user').addEventListener('change', applyFilters)
   document.getElementById('filter-status').addEventListener('change', applyFilters)
   document.getElementById('filter-priority').addEventListener('change', applyFilters)
+  document.getElementById('search-tasks').addEventListener('input', applyFilters)
 }
 
 function clearFilters() {
   document.getElementById('filter-user').value     = ''
   document.getElementById('filter-status').value   = ''
   document.getElementById('filter-priority').value = ''
+  document.getElementById('search-tasks').value    = ''
   applyFilters()
 }
 
@@ -348,6 +415,7 @@ async function toggleProjectStatus(projId, newStatus) {
 
 async function saveTaskEdit(taskId) {
   const errEl     = document.getElementById('task-edit-error')
+  const oldTask   = allTasks.find(t => t.id === taskId)
   const updateData = {
     updated_by: currentProfile.id,
     description: document.getElementById('td-desc')?.value || null,
@@ -369,6 +437,14 @@ async function saveTaskEdit(taskId) {
     return
   }
   showToast('Úkol uložen.')
+  if (isAdmin() && updateData.assigned_to && updateData.assigned_to !== oldTask?.assigned_to) {
+    await createNotification(
+      updateData.assigned_to,
+      'task_assigned',
+      `Byl/a jsi přiřazen/a k úkolu: ${oldTask?.title || ''}`,
+      taskId
+    )
+  }
   closeModal()
   await renderTasks()
 }
@@ -380,6 +456,13 @@ async function deleteTask(taskId) {
   showToast('Úkol smazán.')
   closeModal()
   await renderTasks()
+}
+
+async function createNotification(userId, type, message, taskId) {
+  if (!userId || userId === currentProfile.id) return
+  await db.from('notifications').insert({
+    user_id: userId, type, message, task_id: taskId, project_id: projectId
+  })
 }
 
 // ── Komentáře ─────────────────────────────────────────────────
@@ -408,6 +491,15 @@ async function addComment(taskId) {
   if (textarea) textarea.value = ''
   removeCommentImage()
   showToast('Komentář odeslán.')
+  const commentedTask = allTasks.find(t => t.id === taskId)
+  if (commentedTask?.assigned_to) {
+    await createNotification(
+      commentedTask.assigned_to,
+      'new_comment',
+      `Nový komentář u úkolu: ${commentedTask.title}`,
+      taskId
+    )
+  }
   await refreshCommentsList(taskId)
 }
 
@@ -655,7 +747,7 @@ async function createTask(e) {
     image_url,
   }
 
-  const { error } = await db.from('tasks').insert(payload)
+  const { data: newTask, error } = await db.from('tasks').insert(payload).select('id').single()
   if (error) {
     errEl.textContent = error.message
     errEl.classList.remove('hidden')
@@ -664,6 +756,14 @@ async function createTask(e) {
   }
   pendingTaskImageBlob = null
   showToast('Úkol vytvořen!')
+  if (payload.assigned_to) {
+    await createNotification(
+      payload.assigned_to,
+      'task_assigned',
+      `Byl/a jsi přiřazen/a k úkolu: ${payload.title}`,
+      newTask.id
+    )
+  }
   closeModal()
   await renderTasks()
 }

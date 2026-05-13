@@ -6,9 +6,11 @@ async function init() {
 
   document.getElementById('nav-placeholder').innerHTML = renderNav('my-tasks')
   initReviewBadge()
+  initNotifications()
 
   await loadMyTasks()
   document.getElementById('filter-status').addEventListener('change', applyFilters)
+  document.getElementById('search-tasks').addEventListener('input', applyFilters)
 
   // Realtime: překreslit při změně mých úkolů
   db
@@ -37,13 +39,22 @@ async function loadMyTasks() {
 
 function applyFilters() {
   const filterStatus = document.getElementById('filter-status').value
+  const search       = document.getElementById('search-tasks').value.toLowerCase().trim()
+
   let filtered = allMyTasks
   if (filterStatus) filtered = filtered.filter(t => t.status === filterStatus)
+  if (search)       filtered = filtered.filter(t =>
+    t.title.toLowerCase().includes(search) ||
+    (t.description || '').toLowerCase().includes(search) ||
+    (t.project?.name || '').toLowerCase().includes(search)
+  )
+
   renderMyTasks(filtered)
 }
 
 function clearFilters() {
   document.getElementById('filter-status').value = ''
+  document.getElementById('search-tasks').value  = ''
   applyFilters()
 }
 

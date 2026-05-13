@@ -9,12 +9,14 @@ async function init() {
 
   document.getElementById('nav-placeholder').innerHTML = renderNav('dashboard')
   initReviewBadge()
+  initNotifications()
 
   await loadProfiles()
   await loadProjects()
   renderFilterTabs()
   renderGrid()
   subscribeRealtime()
+  document.getElementById('search-projects').addEventListener('input', renderGrid)
 
   if (new URLSearchParams(window.location.search).has('new')) {
     history.replaceState(null, '', 'dashboard.html')
@@ -43,15 +45,18 @@ function renderFilterTabs() {
   const header = document.querySelector('.page-header')
   if (!header || document.getElementById('project-tabs')) return
 
-  const tabs = document.createElement('div')
-  tabs.id = 'project-tabs'
-  tabs.className = 'filter-tabs'
-  tabs.innerHTML = `
-    <button class="tab-btn active"  data-filter="aktivní"   onclick="setFilter('aktivní')">Aktivní</button>
-    <button class="tab-btn"         data-filter="dokončeno"  onclick="setFilter('dokončeno')">Dokončené</button>
-    <button class="tab-btn"         data-filter="vše"        onclick="setFilter('vše')">Vše</button>
+  const controls = document.createElement('div')
+  controls.id = 'project-controls'
+  controls.className = 'dashboard-controls'
+  controls.innerHTML = `
+    <div id="project-tabs" class="filter-tabs">
+      <button class="tab-btn active"  data-filter="aktivní"   onclick="setFilter('aktivní')">Aktivní</button>
+      <button class="tab-btn"         data-filter="dokončeno"  onclick="setFilter('dokončeno')">Dokončené</button>
+      <button class="tab-btn"         data-filter="vše"        onclick="setFilter('vše')">Vše</button>
+    </div>
+    <input type="text" id="search-projects" class="search-input" placeholder="Hledat projekty…">
   `
-  header.after(tabs)
+  header.after(controls)
 }
 
 function setFilter(filter) {
@@ -66,10 +71,16 @@ function setFilter(filter) {
 
 async function renderGrid() {
   const grid = document.getElementById('projects-grid')
+  const search = (document.getElementById('search-projects')?.value || '').toLowerCase().trim()
 
-  const filtered = activeFilter === 'vše'
+  let filtered = activeFilter === 'vše'
     ? allProjects
     : allProjects.filter(p => p.status === activeFilter)
+
+  if (search) filtered = filtered.filter(p =>
+    p.name.toLowerCase().includes(search) ||
+    (p.description || '').toLowerCase().includes(search)
+  )
 
   if (filtered.length === 0) {
     const msg = activeFilter === 'dokončeno' ? 'Žádné dokončené projekty.'

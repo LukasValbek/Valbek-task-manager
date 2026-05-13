@@ -611,6 +611,33 @@ input:focus, select:focus, textarea:focus {
   width: auto;
 }
 
+.search-input {
+  padding: 7px 10px 7px 32px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 13px;
+  background: var(--card-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") no-repeat 10px center;
+  color: var(--text);
+  min-width: 200px;
+  width: auto;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.search-input::placeholder { color: var(--text-muted, #999); }
+.search-input:focus { border-color: var(--primary); }
+
+.dashboard-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.dashboard-controls .filter-tabs {
+  margin-bottom: 0;
+}
+
 /* ──────────────────────────────────────────────────────────────
    TASK TABLE
 ────────────────────────────────────────────────────────────── */
@@ -1121,6 +1148,86 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ──────────────────────────────────────────────────────────────
+   NOTIFIKACE
+────────────────────────────────────────────────────────────── */
+.notif-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--text);
+  position: relative;
+  transition: background 0.15s;
+}
+.notif-btn:hover { background: var(--brand-light); }
+
+.notif-dropdown {
+  position: fixed;
+  width: 320px;
+  max-height: 440px;
+  overflow-y: auto;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  z-index: 300;
+}
+
+.notif-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 13px;
+  position: sticky;
+  top: 0;
+  background: var(--card-bg);
+}
+
+.notif-item {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.notif-item:last-child { border-bottom: none; }
+.notif-item:hover { background: var(--brand-light); }
+.notif-item.notif-unread { background: #F0F0FF; }
+.notif-item.notif-unread:hover { background: var(--brand-light); }
+.notif-message { font-size: 13px; color: var(--text); line-height: 1.4; }
+.notif-time { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.notif-empty { padding: 20px 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+/* ──────────────────────────────────────────────────────────────
+   LAZY LOADING
+────────────────────────────────────────────────────────────── */
+.load-more-indicator {
+  text-align: center;
+  padding: 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.load-more-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ──────────────────────────────────────────────────────────────
    MOBILE (≤ 640px)
 ────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
@@ -1147,6 +1254,8 @@ input:focus, select:focus, textarea:focus {
   .filter-select { min-width: 0; width: 100%; }
   .filter-bar { flex-direction: column; align-items: stretch; }
   .filter-bar .btn { width: 100%; }
+  .search-input { min-width: 0; width: 100%; }
+  .dashboard-controls { flex-direction: column; align-items: stretch; }
 
   .task-table thead { display: none; }
   .task-table, .task-table tbody, .task-table tr, .task-table td { display: block; width: 100%; }
