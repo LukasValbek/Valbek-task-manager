@@ -1,4 +1,8 @@
 let refData = {}
+let refDragSrcId      = null
+let refDragSrcSection = null
+let refDragOverId     = null
+let refDragTimer      = null
 
 async function init() {
   const profile = await requireAuth()
@@ -48,14 +52,16 @@ function renderSection(section, title, idsOnRight) {
   const items   = refData[section] || []
   const canEdit = isAdmin()
 
+  const dragTh   = canEdit ? '<th class="col-drag"></th>' : ''
   const headerCols = idsOnRight
     ? `<th>Název</th><th style="text-align:right">ID</th>`
     : `<th>Vrstva</th><th>Název</th>`
-  const extraTh = canEdit ? '<th class="ref-del"></th>' : ''
+  const extraTh  = canEdit ? '<th class="ref-del"></th>' : ''
 
-  const rows = items.map(item => renderRefRow(item, canEdit, idsOnRight)).join('')
+  const rows = items.map(item => renderRefRow(item, canEdit, idsOnRight, section)).join('')
 
-  const emptyRow = `<tr><td colspan="3" class="text-muted" style="padding:8px 6px">Žádné položky.</td></tr>`
+  const colCount = canEdit ? 4 : 2
+  const emptyRow = `<tr><td colspan="${colCount}" class="text-muted" style="padding:8px 6px">Žádné položky.</td></tr>`
   const addBtn = canEdit
     ? `<button class="btn btn-sm btn-secondary" style="width:100%;margin-top:2px" onclick="openAddItem('${section}')">+ Přidat</button>`
     : ''
@@ -64,18 +70,26 @@ function renderSection(section, title, idsOnRight) {
     <div class="reference-section">
       <h3>${esc(title)}</h3>
       <table class="ref-table">
-        <thead><tr>${headerCols}${extraTh}</tr></thead>
-        <tbody>${rows || emptyRow}</tbody>
+        <thead><tr>${dragTh}${headerCols}${extraTh}</tr></thead>
+        <tbody id="ref-tbody-${section}">${rows || emptyRow}</tbody>
       </table>
       ${addBtn}
     </div>
   `
 }
 
-function renderRefRow(item, canEdit, idsOnRight) {
-  const id    = item.id
-  const code  = esc(item.code || '–')
-  const name  = esc(item.name)
+function renderRefRow(item, canEdit, idsOnRight, section) {
+  const id   = item.id
+  const code = esc(item.code || '–')
+  const name = esc(item.name)
+
+  const dragTd = canEdit
+    ? `<td class="col-drag" onclick="event.stopPropagation()">
+        <span class="drag-handle" draggable="true"
+              ondragstart="refDragStart(event,'${id}','${section}')"
+              ondragend="refDragEnd(event)">⠿</span>
+      </td>`
+    : ''
 
   const codeTd = canEdit
     ? `<td class="ref-code editable-ref" onclick="inlineEditRef(event,'${id}','code','${esc(item.code || '')}')">${code}</td>`
@@ -89,10 +103,76 @@ function renderRefRow(item, canEdit, idsOnRight) {
     ? `<td class="ref-del"><button class="btn-icon btn-danger" onclick="event.stopPropagation();deleteRefItem('${id}')" title="Smazat">✕</button></td>`
     : ''
 
-  return idsOnRight
-    ? `<tr>${nameTd}${codeTd}${delTd}</tr>`
-    : `<tr>${codeTd}${nameTd}${delTd}</tr>`
+  const dataCols = idsOnRight ? `${nameTd}${codeTd}` : `${codeTd}${nameTd}`
+  return `<tr class="task-row" data-id="${id}" data-section="${section}"
+              ondragover="refDragOver(event,'${id}')"
+              ondrop="refDrop(event,'${id}','${section}')">${dragTd}${dataCols}${delTd}</tr>`
 }
+
+// ── Drag & drop ───────────────────────────────────────────────
+
+function refDragStart(event, itemId, section) {
+  refDragSrcId      = itemId
+  refDragSrcSection = section
+  event.dataTransfer.effectAllowed = 'move'
+  event.currentTarget.closest('tr')?.classList.add('dragging')
+}
+
+function refDragEnd(event) {
+  refDragSrcId      = null
+  refDragSrcSection = null
+  refDragOverId     = null
+  document.querySelectorAll('.ref-table .task-row').forEach(r => r.classList.remove('dragging', 'drag-over'))
+}
+
+function refDragOver(event, itemId) {
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'move'
+  if (refDragOverId !== itemId) {
+    document.querySelectorAll('.ref-table .task-row').forEach(r => r.classList.remove('drag-over'))
+    refDragOverId = itemId
+    const row = document.querySelector(`.ref-table tr[data-id="${itemId}"]`)
+    if (row) row.classList.add('drag-over')
+  }
+}
+
+function refDrop(event, targetId, targetSection) {
+  event.preventDefault()
+  if (!refDragSrcId || refDragSrcId === targetId) return
+  if (refDragSrcSection !== targetSection) return
+
+  const items  = refData[targetSection]
+  const srcIdx = items.findIndex(r => r.id === refDragSrcId)
+  const dstIdx = items.findIndex(r => r.id === targetId)
+  if (srcIdx === -1 || dstIdx === -1) return
+
+  const [moved] = items.splice(srcIdx, 1)
+  items.splice(dstIdx, 0, moved)
+
+  const tbody = document.getElementById(`ref-tbody-${targetSection}`)
+  if (tbody) {
+    const canEdit   = isAdmin()
+    const idsOnRight = targetSection === 'object_ids'
+    tbody.innerHTML = items.map(item => renderRefRow(item, canEdit, idsOnRight, targetSection)).join('')
+  }
+
+  scheduleRefSaveOrder(targetSection)
+}
+
+function scheduleRefSaveOrder(section) {
+  if (refDragTimer) clearTimeout(refDragTimer)
+  refDragTimer = setTimeout(() => saveRefOrder(section), 600)
+}
+
+async function saveRefOrder(section) {
+  const updates = (refData[section] || []).map((item, i) =>
+    db.from('reference_items').update({ sort_order: i * 10 }).eq('id', item.id)
+  )
+  const results = await Promise.all(updates)
+  if (results.some(r => r.error)) showError('Chyba při ukládání pořadí.')
+}
+
+// ── Inline edit ───────────────────────────────────────────────
 
 async function inlineEditRef(event, itemId, field, currentValue) {
   event.stopPropagation()
