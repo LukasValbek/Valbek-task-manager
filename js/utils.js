@@ -443,6 +443,8 @@ function initNotifications() {
 async function openProfileModal() {
   const color    = currentProfile.color    || avatarColor(currentProfile.name)
   const initials = currentProfile.initials || currentProfile.name.slice(0, 2).toUpperCase()
+  const { data: { user } } = await db.auth.getUser()
+  const currentEmail = user?.email || ''
 
   openModal(`
     <div class="modal-header">
@@ -477,7 +479,9 @@ async function openProfileModal() {
     </div>
 
     <div class="profile-section">
-      <h3 style="margin-bottom:12px">Změnit e-mail</h3>
+      <h3 style="margin-bottom:12px">E-mail pro reset hesla</h3>
+      <p class="text-muted" style="margin-bottom:10px">Přihlašuješ se uživatelským jménem — e-mail slouží jen pro reset hesla.</p>
+      ${currentEmail ? `<p style="margin-bottom:10px;font-size:13px">Aktuální: <strong>${esc(currentEmail)}</strong></p>` : ''}
       <div class="form-group">
         <label>Nový e-mail</label>
         <input type="email" id="prof-email" placeholder="novy@email.cz">
