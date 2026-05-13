@@ -30,6 +30,7 @@ async function init() {
     document.getElementById('nav-placeholder').innerHTML = renderNav('project')
     initReviewBadge()
     initNotifications()
+    initKeyboardShortcuts()
 
     await loadProjectData()
     await renderTasks()

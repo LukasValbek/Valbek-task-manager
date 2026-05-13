@@ -10,6 +10,7 @@ async function init() {
   document.getElementById('nav-placeholder').innerHTML = renderNav('dashboard')
   initReviewBadge()
   initNotifications()
+  initKeyboardShortcuts()
 
   await loadProfiles()
   await loadProjects()

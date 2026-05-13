@@ -9,6 +9,7 @@ async function init() {
   document.getElementById('nav-placeholder').innerHTML = renderNav('review')
   initReviewBadge()
   initNotifications()
+  initKeyboardShortcuts()
 
   await loadReviewTasks()
   renderReview()

@@ -1457,3 +1457,86 @@ input:focus, select:focus, textarea:focus {
 
 .task-row.dragging { opacity: 0.35; background: var(--brand-light); }
 .task-row.drag-over { outline: 2px solid var(--brand); outline-offset: -2px; }
+
+/* ──────────────────────────────────────────────────────────────
+   PROFIL – modální okno
+────────────────────────────────────────────────────────────── */
+.nav-username {
+  font-size: 14px;
+  color: var(--text);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.nav-username:hover { color: var(--brand); }
+
+.profile-section {
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+
+.profile-section:first-child { border-top: none; padding-top: 0; }
+
+.profile-avatar-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.profile-avatar-wrap .avatar {
+  width: 56px;
+  height: 56px;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  cursor: pointer;
+  transition: transform .12s, border-color .12s;
+  outline: none;
+}
+
+.color-swatch:hover { transform: scale(1.15); }
+
+.color-swatch.selected {
+  border-color: var(--text);
+  transform: scale(1.1);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   KLÁVESOVÉ ZKRATKY – nápověda
+────────────────────────────────────────────────────────────── */
+.shortcuts-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+
+.shortcuts-table tr { border-bottom: 1px solid var(--border); }
+.shortcuts-table tr:last-child { border-bottom: none; }
+.shortcuts-table td { padding: 9px 4px; font-size: 14px; }
+.shortcuts-table td:first-child { white-space: nowrap; padding-right: 20px; }
+
+kbd {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 12px;
+  font-family: var(--font);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  box-shadow: 0 1px 0 var(--border);
+  color: var(--text);
+}

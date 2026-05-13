@@ -134,7 +134,7 @@ function renderNav(activePage) {
         <button class="notif-btn" id="notif-btn" onclick="toggleNotifDropdown()" title="Upozornění">
           🔔<span id="notif-badge" class="nav-badge hidden"></span>
         </button>
-        <span>${esc(name)}</span>
+        <button class="btn-link nav-username" onclick="openProfileModal()" title="Upravit profil">${esc(name)}</button>
         <button class="btn-link" onclick="logout()">Odhlásit</button>
       </div>
     </nav>
@@ -436,6 +436,202 @@ function initNotifications() {
       filter: `user_id=eq.${currentProfile.id}`
     }, () => loadNotifications())
     .subscribe()
+}
+
+// ── Profil ────────────────────────────────────────────────────
+
+async function openProfileModal() {
+  const color    = currentProfile.color    || avatarColor(currentProfile.name)
+  const initials = currentProfile.initials || currentProfile.name.slice(0, 2).toUpperCase()
+
+  openModal(`
+    <div class="modal-header">
+      <h2>Profil</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="profile-section">
+      <div class="profile-avatar-wrap">
+        <div id="profile-avatar-preview">${avatar(currentProfile.name, false, initials, color)}</div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Jméno</label>
+          <input type="text" id="prof-name" value="${esc(currentProfile.name)}">
+        </div>
+        <div class="form-group">
+          <label>Iniciály</label>
+          <input type="text" id="prof-initials" maxlength="2" value="${esc(initials)}" style="width:72px">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Barva avataru</label>
+        <div class="color-swatches" id="color-swatches">
+          ${_renderColorSwatches(color)}
+        </div>
+      </div>
+      <div id="profile-error" class="form-error hidden"></div>
+      <div class="modal-actions" style="margin-top:8px">
+        <button class="btn btn-primary" onclick="saveProfile()">Uložit profil</button>
+      </div>
+    </div>
+
+    <div class="profile-section">
+      <h3 style="margin-bottom:12px">Změnit e-mail</h3>
+      <div class="form-group">
+        <label>Nový e-mail</label>
+        <input type="email" id="prof-email" placeholder="novy@email.cz">
+      </div>
+      <div id="email-error" class="form-error hidden"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="changeEmail()">Uložit e-mail</button>
+      </div>
+    </div>
+
+    <div class="profile-section">
+      <h3 style="margin-bottom:12px">Změnit heslo</h3>
+      <div class="form-group">
+        <label>Nové heslo</label>
+        <input type="password" id="prof-pw1" placeholder="Minimálně 6 znaků">
+      </div>
+      <div class="form-group">
+        <label>Potvrdit heslo</label>
+        <input type="password" id="prof-pw2" placeholder="Zopakuj heslo">
+      </div>
+      <div id="pw-error" class="form-error hidden"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="changePassword()">Změnit heslo</button>
+      </div>
+    </div>
+  `)
+
+  document.getElementById('prof-name').addEventListener('input', _updateProfilePreview)
+  document.getElementById('prof-initials').addEventListener('input', _updateProfilePreview)
+}
+
+function _renderColorSwatches(selectedColor) {
+  return AVATAR_COLORS.map(c => `
+    <button type="button" class="color-swatch ${c === selectedColor ? 'selected' : ''}"
+            style="background:${c}" data-color="${c}"
+            onclick="selectProfileColor('${c}')" title="${c}"></button>
+  `).join('')
+}
+
+function selectProfileColor(color) {
+  document.querySelectorAll('.color-swatch').forEach(s => s.classList.toggle('selected', s.dataset.color === color))
+  _updateProfilePreview()
+}
+
+function _updateProfilePreview() {
+  const name     = document.getElementById('prof-name')?.value || currentProfile.name
+  const initials = (document.getElementById('prof-initials')?.value || name.slice(0, 2)).toUpperCase()
+  const color    = document.querySelector('.color-swatch.selected')?.dataset.color || avatarColor(name)
+  const preview  = document.getElementById('profile-avatar-preview')
+  if (preview) preview.innerHTML = avatar(name, false, initials, color)
+}
+
+async function saveProfile() {
+  const errEl    = document.getElementById('profile-error')
+  const name     = document.getElementById('prof-name')?.value?.trim()
+  const initials = (document.getElementById('prof-initials')?.value?.trim() || name?.slice(0, 2) || '').toUpperCase()
+  const color    = document.querySelector('.color-swatch.selected')?.dataset.color || currentProfile.color
+
+  errEl.classList.add('hidden')
+  if (!name) { errEl.textContent = 'Jméno nesmí být prázdné.'; errEl.classList.remove('hidden'); return }
+
+  const { error } = await db.from('profiles').update({ name, initials, color }).eq('id', currentProfile.id)
+  if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); return }
+
+  currentProfile.name     = name
+  currentProfile.initials = initials
+  currentProfile.color    = color
+
+  showToast('Profil uložen.')
+  closeModal()
+  document.querySelector('.nav-username')?.textContent && (document.querySelector('.nav-username').textContent = name)
+}
+
+async function changeEmail() {
+  const errEl = document.getElementById('email-error')
+  const email = document.getElementById('prof-email')?.value?.trim()
+  errEl.classList.add('hidden')
+  if (!email) { errEl.textContent = 'Zadej e-mail.'; errEl.classList.remove('hidden'); return }
+
+  const { error } = await db.auth.updateUser({ email })
+  if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); return }
+  showToast('E-mail uložen. Potvrď změnu v doručené poště.')
+  document.getElementById('prof-email').value = ''
+}
+
+async function changePassword() {
+  const errEl = document.getElementById('pw-error')
+  const pw1   = document.getElementById('prof-pw1')?.value
+  const pw2   = document.getElementById('prof-pw2')?.value
+  errEl.classList.add('hidden')
+  if (!pw1)          { errEl.textContent = 'Zadej nové heslo.';           errEl.classList.remove('hidden'); return }
+  if (pw1.length < 6){ errEl.textContent = 'Heslo musí mít alespoň 6 znaků.'; errEl.classList.remove('hidden'); return }
+  if (pw1 !== pw2)   { errEl.textContent = 'Hesla se neshodují.';         errEl.classList.remove('hidden'); return }
+
+  const { error } = await db.auth.updateUser({ password: pw1 })
+  if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); return }
+  showToast('Heslo bylo změněno.')
+  document.getElementById('prof-pw1').value = ''
+  document.getElementById('prof-pw2').value = ''
+}
+
+// ── Klávesové zkratky ─────────────────────────────────────────
+
+function initKeyboardShortcuts() {
+  document.addEventListener('keydown', e => {
+    const tag = document.activeElement?.tagName
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      const btn = document.querySelector('.modal-overlay.active .btn-primary')
+      if (btn) { e.preventDefault(); btn.click() }
+      return
+    }
+
+    if (e.ctrlKey || e.metaKey || e.altKey) return
+
+    const modalOpen = !!document.querySelector('.modal-overlay.active')
+
+    switch (e.key) {
+      case 'n':
+      case 'N':
+        if (!modalOpen && typeof openCreateTask === 'function') {
+          e.preventDefault()
+          openCreateTask()
+        }
+        break
+      case '/':
+        e.preventDefault()
+        ;(document.getElementById('search-tasks') || document.getElementById('search-projects'))?.focus()
+        break
+      case '?':
+        e.preventDefault()
+        showShortcutsHelp()
+        break
+    }
+  })
+}
+
+function showShortcutsHelp() {
+  openModal(`
+    <div class="modal-header">
+      <h2>Klávesové zkratky</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <table class="shortcuts-table">
+      <tbody>
+        <tr><td><kbd>N</kbd></td><td>Nový úkol (stránka projektu)</td></tr>
+        <tr><td><kbd>/</kbd></td><td>Přejít na vyhledávání</td></tr>
+        <tr><td><kbd>Escape</kbd></td><td>Zavřít dialog</td></tr>
+        <tr><td><kbd>Ctrl</kbd> + <kbd>Enter</kbd></td><td>Uložit otevřený formulář</td></tr>
+        <tr><td><kbd>?</kbd></td><td>Tato nápověda</td></tr>
+      </tbody>
+    </table>
+  `, 'modal-sm')
 }
 
 async function inlineDueDate(event, taskId, currentDue) {

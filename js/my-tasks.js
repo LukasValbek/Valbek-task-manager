@@ -7,6 +7,7 @@ async function init() {
   document.getElementById('nav-placeholder').innerHTML = renderNav('my-tasks')
   initReviewBadge()
   initNotifications()
+  initKeyboardShortcuts()
 
   await loadMyTasks()
   document.getElementById('filter-status').addEventListener('change', applyFilters)
