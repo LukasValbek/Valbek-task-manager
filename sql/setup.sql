@@ -227,7 +227,39 @@ CREATE POLICY "notif_all_own" ON notifications
 -- ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
 
 -- ────────────────────────────────────────────────────────────
--- 7. REALTIME – povolit pro tabulky
+-- 7. TASK ACTIVITY LOG
+-- ────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS task_activity (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id    UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES profiles(id),
+  field      TEXT NOT NULL,
+  old_value  TEXT,
+  new_value  TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_activity_task ON task_activity(task_id, created_at DESC);
+
+ALTER TABLE task_activity ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "activity_select" ON task_activity;
+CREATE POLICY "activity_select" ON task_activity
+  FOR SELECT TO authenticated
+  USING (is_project_member(task_project_id(task_id)));
+
+DROP POLICY IF EXISTS "activity_insert" ON task_activity;
+CREATE POLICY "activity_insert" ON task_activity
+  FOR INSERT TO authenticated
+  WITH CHECK (is_project_member(task_project_id(task_id)));
+
+-- Drag & drop sort order
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS sort_order BIGINT DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_tasks_sort_order ON tasks(project_id, sort_order);
+
+-- ────────────────────────────────────────────────────────────
+-- 8. REALTIME – povolit pro tabulky
 -- ────────────────────────────────────────────────────────────
 -- Spustit ručně v Supabase Dashboard:
 -- Database > Replication > zapnout pro: projects, project_members, tasks, comments, notifications
@@ -236,7 +268,7 @@ CREATE POLICY "notif_all_own" ON notifications
 -- ALTER PUBLICATION supabase_realtime ADD TABLE projects, project_members, tasks, comments, notifications;
 
 -- ────────────────────────────────────────────────────────────
--- 7. SEED DATA – 4 uživatelé
+-- 9. SEED DATA – 4 uživatelé
 -- ────────────────────────────────────────────────────────────
 -- POSTUP:
 -- 1. Nejprve vytvořte uživatele v Supabase Dashboard > Authentication > Users:

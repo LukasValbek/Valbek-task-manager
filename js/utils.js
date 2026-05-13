@@ -263,6 +263,18 @@ function memberOptions(profiles, selected) {
   ).join('')
 }
 
+// ── Aktivitní log ─────────────────────────────────────────────
+
+async function logActivity(taskId, field, oldVal, newVal) {
+  await db.from('task_activity').insert({
+    task_id:   taskId,
+    user_id:   currentProfile.id,
+    field,
+    old_value: oldVal !== null && oldVal !== undefined ? String(oldVal) : null,
+    new_value: newVal !== null && newVal !== undefined ? String(newVal) : null,
+  })
+}
+
 // ── Cesta k souboru ──────────────────────────────────────────
 
 async function copyPath(text) {
@@ -299,6 +311,7 @@ async function inlineStatus(event, taskId, currentStatus) {
     const val = sel.value
     const { error } = await db.from('tasks').update({ status: val, updated_by: currentProfile.id }).eq('id', taskId)
     if (error) { showError(error.message); cell.innerHTML = original; return }
+    await logActivity(taskId, 'status', currentStatus, val)
     cell.innerHTML = statusBadge(val)
     showToast('Stav uložen.')
   })
@@ -320,6 +333,7 @@ async function inlinePriority(event, taskId, currentPriority) {
     const val = sel.value
     const { error } = await db.from('tasks').update({ priority: val, updated_by: currentProfile.id }).eq('id', taskId)
     if (error) { showError(error.message); cell.innerHTML = original; return }
+    await logActivity(taskId, 'priority', currentPriority, val)
     cell.innerHTML = priorityBadge(val)
     showToast('Priorita uložena.')
   })
@@ -439,6 +453,7 @@ async function inlineDueDate(event, taskId, currentDue) {
     const val = input.value || null
     const { error } = await db.from('tasks').update({ due_date: val, updated_by: currentProfile.id }).eq('id', taskId)
     if (error) { showError(error.message); cell.innerHTML = original; return }
+    await logActivity(taskId, 'due_date', currentDue || null, val)
     const overdue = isOverdue(val)
     cell.className = `editable-cell${overdue ? ' overdue-text' : ''}`
     cell.textContent = formatDate(val)

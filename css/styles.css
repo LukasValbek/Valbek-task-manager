@@ -1295,3 +1295,165 @@ input:focus, select:focus, textarea:focus {
 @media (min-width: 641px) and (max-width: 1024px) {
   .projects-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* Tab panel overrides existing comments-section border */
+.task-tab-panel .comments-section { border-top: none; padding-top: 0; }
+
+/* ──────────────────────────────────────────────────────────────
+   TASK TABS (Komentáře / Historie)
+────────────────────────────────────────────────────────────── */
+.task-tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin: 20px 0 0;
+  gap: 0;
+}
+
+.task-tab {
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+}
+
+.task-tab:hover { color: var(--text); }
+
+.task-tab.active {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+}
+
+.task-tab-panel { padding-top: 14px; }
+.task-tab-panel.hidden { display: none; }
+
+/* ──────────────────────────────────────────────────────────────
+   ACTIVITY LOG
+────────────────────────────────────────────────────────────── */
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.activity-item {
+  font-size: 13px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.activity-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+.activity-change {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  color: var(--text);
+}
+
+.activity-field { font-weight: 600; }
+.activity-old { text-decoration: line-through; color: var(--text-muted); }
+.activity-new { font-weight: 500; }
+.activity-arrow { color: var(--text-muted); }
+
+/* ──────────────────────────────────────────────────────────────
+   BULK ACTION BAR
+────────────────────────────────────────────────────────────── */
+.bulk-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--brand);
+  color: #fff;
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.bulk-action-bar.hidden { display: none; }
+
+.bulk-count {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.bulk-action-bar select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: none;
+  font-size: 13px;
+  background: rgba(255,255,255,.9);
+  color: var(--text);
+  cursor: pointer;
+  max-width: 160px;
+}
+
+.bulk-action-bar .btn-secondary {
+  background: rgba(255,255,255,.2);
+  color: #fff;
+  border-color: rgba(255,255,255,.3);
+}
+
+.bulk-action-bar .btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+}
+
+.col-checkbox {
+  width: 36px;
+  text-align: center;
+  padding: 0 !important;
+}
+
+.task-cb {
+  cursor: pointer;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--brand);
+}
+
+/* ──────────────────────────────────────────────────────────────
+   DRAG & DROP
+────────────────────────────────────────────────────────────── */
+.col-drag {
+  width: 28px;
+  text-align: center;
+  padding: 0 !important;
+}
+
+.drag-handle {
+  display: inline-block;
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 16px;
+  padding: 4px;
+  line-height: 1;
+  user-select: none;
+  opacity: 0.4;
+  transition: opacity .15s;
+}
+
+.drag-handle:hover { opacity: 1; }
+.drag-handle:active { cursor: grabbing; }
+
+.task-row.dragging { opacity: 0.35; background: var(--brand-light); }
+.task-row.drag-over { outline: 2px solid var(--brand); outline-offset: -2px; }

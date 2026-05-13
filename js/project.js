@@ -12,6 +12,11 @@ let taskHasMore     = true
 let taskObserver    = null
 let taskLoading     = false
 
+let selectedTaskIds = new Set()
+let dragSrcId       = null
+let dragOverId      = null
+let dragSaveTimer   = null
+
 // ── Init ──────────────────────────────────────────────────────
 
 async function init() {
@@ -110,6 +115,7 @@ function buildTaskQuery(offset) {
     .from('tasks')
     .select('*, comments(count), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name)')
     .eq('project_id', projectId)
+    .order('sort_order', { ascending: true, nullsFirst: false })
     .order('due_date', { ascending: true, nullsFirst: false })
     .range(offset, offset + BATCH_SIZE - 1)
 
@@ -123,10 +129,11 @@ function buildTaskQuery(offset) {
 
 async function renderTasks() {
   const container = document.getElementById('tasks-container')
-  taskOffset  = 0
-  taskHasMore = true
-  taskLoading = false
-  allTasks    = []
+  taskOffset      = 0
+  taskHasMore     = true
+  taskLoading     = false
+  allTasks        = []
+  selectedTaskIds = new Set()
   if (taskObserver) { taskObserver.disconnect(); taskObserver = null }
   container.innerHTML = '<div class="loading-state">Načítám úkoly…</div>'
 
@@ -205,8 +212,24 @@ function renderTaskRow(t) {
         onclick="event.stopPropagation();copyPath(this.dataset.path)">📋</button>` : ''}
     ${canDelete ? `<button class="btn-icon btn-danger" onclick="event.stopPropagation();deleteTask('${t.id}')" title="Smazat úkol">🗑</button>` : ''}
   </td>`
+  const dragTd = isAdmin()
+    ? `<td class="col-drag" onclick="event.stopPropagation()">
+        <span class="drag-handle" draggable="true"
+              ondragstart="handleDragStart(event,'${t.id}')"
+              ondragend="handleDragEnd(event)">⠿</span>
+      </td>`
+    : `<td class="col-drag"></td>`
   return `
-    <tr class="task-row ${overdue ? 'overdue' : ''}" onclick="openTaskDetail('${t.id}')">
+    <tr class="task-row ${overdue ? 'overdue' : ''}" data-id="${t.id}"
+        ondragover="handleDragOver(event,'${t.id}')"
+        ondrop="handleDrop(event,'${t.id}')"
+        onclick="openTaskDetail('${t.id}')">
+      ${dragTd}
+      <td class="col-checkbox" onclick="event.stopPropagation()">
+        <input type="checkbox" class="task-cb" id="cb-${t.id}"
+               ${selectedTaskIds.has(t.id) ? 'checked' : ''}
+               onchange="toggleBulkCheckbox(event,'${t.id}')">
+      </td>
       <td class="task-title-cell">
         <span class="task-title">${esc(t.title)}</span>
         ${commentCount > 0 ? `<span class="comment-count">💬 ${commentCount}</span>` : ''}
@@ -226,10 +249,31 @@ function renderTaskList(tasks) {
     return
   }
 
+  const bulkAssignedSelect = isAdmin()
+    ? `<select id="bulk-assigned" onchange="bulkApplyAssigned()">
+        <option value="">Přiřadit…</option>
+        ${memberOptions(projectMembers, '')}
+      </select>`
+    : ''
+
   container.innerHTML = `
+    <div id="bulk-action-bar" class="bulk-action-bar hidden">
+      <span id="bulk-count" class="bulk-count"></span>
+      <select id="bulk-status" onchange="bulkApplyStatus()">
+        <option value="">Změnit stav…</option>
+        ${statusOptions('')}
+      </select>
+      ${bulkAssignedSelect}
+      <button class="btn btn-sm btn-danger" onclick="bulkDelete()">🗑 Smazat</button>
+      <button class="btn btn-sm btn-secondary" onclick="clearBulkSelection()">✕ Zrušit výběr</button>
+    </div>
     <table class="task-table">
       <thead>
         <tr>
+          <th class="col-drag"></th>
+          <th class="col-checkbox">
+            <input type="checkbox" class="task-cb" id="cb-all" onchange="toggleAllCheckboxes(this.checked)" title="Vybrat vše">
+          </th>
           <th>Úkol</th>
           <th>Přiřazený</th>
           <th>Stav</th>
@@ -366,24 +410,35 @@ async function openTaskDetail(taskId) {
       </div>
     </div>
 
-    <!-- Komentáře -->
-    <div class="comments-section">
-      <h3>Komentáře</h3>
-      <div id="comments-list">
-        ${commentsHtml || '<p class="text-muted">Zatím žádné komentáře.</p>'}
+    <div class="task-tab-bar">
+      <button class="task-tab active" id="tab-btn-comments" onclick="switchTaskTab('comments','${taskId}')">💬 Komentáře</button>
+      <button class="task-tab" id="tab-btn-history" onclick="switchTaskTab('history','${taskId}')">📋 Historie</button>
+    </div>
+
+    <div id="tab-panel-comments" class="task-tab-panel">
+      <div class="comments-section">
+        <div id="comments-list">
+          ${commentsHtml || '<p class="text-muted">Zatím žádné komentáře.</p>'}
+        </div>
+        <div class="comment-form">
+          <div id="img-preview-wrap" class="img-preview-wrap hidden">
+            <img id="img-preview" class="comment-img-preview" alt="náhled">
+            <button class="btn-icon" onclick="removeCommentImage()" title="Odebrat obrázek">✕</button>
+          </div>
+          <textarea id="new-comment" rows="2" placeholder="Napište komentář… (Ctrl+V pro screenshot)"></textarea>
+          <div class="comment-form-actions">
+            <label class="btn btn-sm btn-secondary" title="Přiložit obrázek ze souboru" style="cursor:pointer">
+              📎<input type="file" accept="image/*" style="display:none" onchange="attachImageFile(event)">
+            </label>
+            <button class="btn btn-primary btn-sm" onclick="addComment('${taskId}')">Odeslat</button>
+          </div>
+        </div>
       </div>
-      <div class="comment-form">
-        <div id="img-preview-wrap" class="img-preview-wrap hidden">
-          <img id="img-preview" class="comment-img-preview" alt="náhled">
-          <button class="btn-icon" onclick="removeCommentImage()" title="Odebrat obrázek">✕</button>
-        </div>
-        <textarea id="new-comment" rows="2" placeholder="Napište komentář… (Ctrl+V pro screenshot)"></textarea>
-        <div class="comment-form-actions">
-          <label class="btn btn-sm btn-secondary" title="Přiložit obrázek ze souboru" style="cursor:pointer">
-            📎<input type="file" accept="image/*" style="display:none" onchange="attachImageFile(event)">
-          </label>
-          <button class="btn btn-primary btn-sm" onclick="addComment('${taskId}')">Odeslat</button>
-        </div>
+    </div>
+
+    <div id="tab-panel-history" class="task-tab-panel hidden">
+      <div id="activity-list" class="activity-list">
+        <p class="text-muted">Načítám historii…</p>
       </div>
     </div>
   `)
@@ -436,6 +491,23 @@ async function saveTaskEdit(taskId) {
     errEl.classList.remove('hidden')
     return
   }
+  if (oldTask) {
+    for (const field of ['status', 'priority', 'due_date']) {
+      const oldVal = oldTask[field] || null
+      const newVal = updateData[field] || null
+      if (oldVal !== newVal) await logActivity(taskId, field, oldVal, newVal)
+    }
+    if (isAdmin()) {
+      const oldAssigned = oldTask.assigned_to || null
+      const newAssigned = updateData.assigned_to || null
+      if (oldAssigned !== newAssigned) {
+        const oldName = projectMembers.find(m => m.id === oldAssigned)?.name || null
+        const newName = projectMembers.find(m => m.id === newAssigned)?.name || null
+        await logActivity(taskId, 'assigned_to', oldName, newName)
+      }
+    }
+  }
+
   showToast('Úkol uložen.')
   if (isAdmin() && updateData.assigned_to && updateData.assigned_to !== oldTask?.assigned_to) {
     await createNotification(
@@ -733,6 +805,7 @@ async function createTask(e) {
     image_url = urlData.publicUrl
   }
 
+  const maxOrder = allTasks.reduce((max, t) => Math.max(max, t.sort_order || 0), 0)
   const payload = {
     project_id:  projectId,
     title:       document.getElementById('ct-title').value.trim(),
@@ -744,6 +817,7 @@ async function createTask(e) {
     file_path:   document.getElementById('ct-filepath').value.trim() || null,
     created_by:  currentProfile.id,
     updated_by:  currentProfile.id,
+    sort_order:  maxOrder + 10,
     image_url,
   }
 
@@ -756,6 +830,7 @@ async function createTask(e) {
   }
   pendingTaskImageBlob = null
   showToast('Úkol vytvořen!')
+  await logActivity(newTask.id, 'created', null, payload.title)
   if (payload.assigned_to) {
     await createNotification(
       payload.assigned_to,
@@ -863,6 +938,192 @@ async function saveMembers() {
   closeModal()
   await loadProjectData()
   await renderTasks()
+}
+
+// ── Aktivitní log ─────────────────────────────────────────────
+
+function switchTaskTab(tab, taskId) {
+  document.getElementById('tab-panel-comments').classList.toggle('hidden', tab !== 'comments')
+  document.getElementById('tab-panel-history').classList.toggle('hidden', tab !== 'history')
+  document.getElementById('tab-btn-comments').classList.toggle('active', tab === 'comments')
+  document.getElementById('tab-btn-history').classList.toggle('active', tab === 'history')
+  if (tab === 'history') loadActivityLog(taskId)
+}
+
+async function loadActivityLog(taskId) {
+  const list = document.getElementById('activity-list')
+  if (!list) return
+  const { data, error } = await db
+    .from('task_activity')
+    .select('*, user:user_id(name)')
+    .eq('task_id', taskId)
+    .order('created_at', { ascending: false })
+
+  if (error) { list.innerHTML = '<p class="text-muted">Chyba načítání.</p>'; return }
+  if (!data || data.length === 0) { list.innerHTML = '<p class="text-muted">Žádná historie.</p>'; return }
+  list.innerHTML = data.map(renderActivityItem).join('')
+}
+
+function renderActivityItem(a) {
+  const fieldLabels = { status: 'Stav', priority: 'Priorita', due_date: 'Termín', assigned_to: 'Přiřazený', file_path: 'Cesta', created: 'Vytvoření' }
+  const fieldLabel = fieldLabels[a.field] || a.field
+
+  let changeHtml
+  if (a.field === 'created') {
+    changeHtml = `<span>Úkol byl vytvořen: <strong>${esc(a.new_value || '')}</strong></span>`
+  } else {
+    const oldDisplay = formatActivityValue(a.field, a.old_value)
+    const newDisplay = formatActivityValue(a.field, a.new_value)
+    changeHtml = `
+      <span class="activity-field">${esc(fieldLabel)}</span>:
+      ${a.old_value ? `<span class="activity-old">${esc(oldDisplay)}</span> <span class="activity-arrow">→</span>` : ''}
+      <span class="activity-new">${esc(newDisplay)}</span>
+    `
+  }
+
+  return `
+    <div class="activity-item">
+      <div class="activity-meta">${esc(a.user?.name || '?')} · ${formatDateTime(a.created_at)}</div>
+      <div class="activity-change">${changeHtml}</div>
+    </div>
+  `
+}
+
+function formatActivityValue(field, value) {
+  if (!value) return '–'
+  if (field === 'status') return STATUS_LABELS[value] || value
+  if (field === 'priority') return PRIORITY_LABELS[value] || value
+  if (field === 'due_date') return formatDate(value)
+  return value
+}
+
+// ── Hromadné operace ──────────────────────────────────────────
+
+function toggleBulkCheckbox(event, taskId) {
+  if (event.target.checked) selectedTaskIds.add(taskId)
+  else { selectedTaskIds.delete(taskId); const all = document.getElementById('cb-all'); if (all) all.checked = false }
+  updateBulkBar()
+}
+
+function toggleAllCheckboxes(checked) {
+  allTasks.forEach(t => {
+    if (checked) selectedTaskIds.add(t.id)
+    else selectedTaskIds.delete(t.id)
+    const cb = document.getElementById(`cb-${t.id}`)
+    if (cb) cb.checked = checked
+  })
+  updateBulkBar()
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('bulk-action-bar')
+  if (!bar) return
+  const count = selectedTaskIds.size
+  bar.classList.toggle('hidden', count === 0)
+  const countEl = document.getElementById('bulk-count')
+  if (countEl) {
+    const suffix = count === 1 ? 'vybrán' : count < 5 ? 'vybrány' : 'vybráno'
+    countEl.textContent = `${count} ${suffix}`
+  }
+}
+
+async function bulkApplyStatus() {
+  const select = document.getElementById('bulk-status')
+  const status = select?.value
+  if (!status || selectedTaskIds.size === 0) return
+  select.value = ''
+  const ids = [...selectedTaskIds]
+  const { error } = await db.from('tasks').update({ status, updated_by: currentProfile.id }).in('id', ids)
+  if (error) { showError(error.message); return }
+  showToast(`Stav změněn u ${ids.length} úkolů.`)
+  clearBulkSelection()
+  await renderTasks()
+}
+
+async function bulkApplyAssigned() {
+  const select = document.getElementById('bulk-assigned')
+  const userId = select?.value || null
+  if (!userId || selectedTaskIds.size === 0) return
+  select.value = ''
+  const ids = [...selectedTaskIds]
+  const { error } = await db.from('tasks').update({ assigned_to: userId, updated_by: currentProfile.id }).in('id', ids)
+  if (error) { showError(error.message); return }
+  showToast(`Přiřazení změněno u ${ids.length} úkolů.`)
+  clearBulkSelection()
+  await renderTasks()
+}
+
+async function bulkDelete() {
+  if (selectedTaskIds.size === 0) return
+  const count = selectedTaskIds.size
+  if (!await confirmDialog(`Smazat ${count} ${count === 1 ? 'úkol' : count < 5 ? 'úkoly' : 'úkolů'}? Tato akce je nevratná.`, { confirmLabel: 'Smazat', danger: true })) return
+  const ids = [...selectedTaskIds]
+  const { error } = await db.from('tasks').delete().in('id', ids)
+  if (error) { showError(error.message); return }
+  showToast(`Smazáno ${ids.length} úkolů.`)
+  clearBulkSelection()
+  await renderTasks()
+}
+
+function clearBulkSelection() {
+  selectedTaskIds.clear()
+  document.querySelectorAll('.task-cb').forEach(cb => cb.checked = false)
+  updateBulkBar()
+}
+
+// ── Drag & drop řazení ────────────────────────────────────────
+
+function handleDragStart(event, taskId) {
+  dragSrcId = taskId
+  event.dataTransfer.effectAllowed = 'move'
+  event.currentTarget.closest('tr')?.classList.add('dragging')
+}
+
+function handleDragEnd(event) {
+  dragSrcId  = null
+  dragOverId = null
+  document.querySelectorAll('.task-row').forEach(r => r.classList.remove('dragging', 'drag-over'))
+}
+
+function handleDragOver(event, taskId) {
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'move'
+  if (dragOverId !== taskId) {
+    document.querySelectorAll('.task-row').forEach(r => r.classList.remove('drag-over'))
+    dragOverId = taskId
+    const row = document.querySelector(`tr[data-id="${taskId}"]`)
+    if (row) row.classList.add('drag-over')
+  }
+}
+
+async function handleDrop(event, taskId) {
+  event.preventDefault()
+  if (!dragSrcId || dragSrcId === taskId) return
+
+  const srcIdx = allTasks.findIndex(t => t.id === dragSrcId)
+  const dstIdx = allTasks.findIndex(t => t.id === taskId)
+  if (srcIdx === -1 || dstIdx === -1) return
+
+  const [moved] = allTasks.splice(srcIdx, 1)
+  allTasks.splice(dstIdx, 0, moved)
+
+  const tbody = document.getElementById('task-tbody')
+  if (tbody) tbody.innerHTML = allTasks.map(renderTaskRow).join('')
+
+  scheduleSaveDragOrder()
+}
+
+function scheduleSaveDragOrder() {
+  if (dragSaveTimer) clearTimeout(dragSaveTimer)
+  dragSaveTimer = setTimeout(saveDragOrder, 600)
+}
+
+async function saveDragOrder() {
+  const updates = allTasks.map((t, i) =>
+    db.from('tasks').update({ sort_order: i * 10 }).eq('id', t.id)
+  )
+  const results = await Promise.all(updates)
+  if (results.some(r => r.error)) showError('Chyba při ukládání pořadí.')
 }
 
 // ── Realtime tasks ────────────────────────────────────────────
