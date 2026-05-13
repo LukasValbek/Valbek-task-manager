@@ -111,7 +111,8 @@ function setLoading(btn, loading) {
 function renderNav(activePage) {
   const name = currentProfile?.name || ''
   const adminItems = isAdmin()
-    ? `<button class="btn-link" onclick="navCreateProject()">+ Nový projekt</button>`
+    ? `<button class="btn-link" onclick="navCreateProject()">+ Nový projekt</button>
+       <button class="btn-link" onclick="openCreateUser()">+ Nový uživatel</button>`
     : ''
   const reviewLink = isAdmin() ? `
     <a href="review.html" class="${activePage === 'review' ? 'active' : ''}">
@@ -581,6 +582,82 @@ async function changePassword() {
   showToast('Heslo bylo změněno.')
   document.getElementById('prof-pw1').value = ''
   document.getElementById('prof-pw2').value = ''
+}
+
+// ── Správa uživatelů (admin) ──────────────────────────────────
+
+function openCreateUser() {
+  openModal(`
+    <div class="modal-header">
+      <h2>Nový uživatel</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <form id="create-user-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Přihlašovací jméno</label>
+          <input type="text" id="cu-username" required placeholder="jan.novak" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Celé jméno</label>
+          <input type="text" id="cu-name" required placeholder="Jan Novák">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>E-mail (pro reset hesla)</label>
+        <input type="email" id="cu-email" required placeholder="jan@firma.cz" autocomplete="off">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Počáteční heslo</label>
+          <input type="password" id="cu-password" required placeholder="Alespoň 6 znaků" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label>Role</label>
+          <select id="cu-role">
+            <option value="user">Uživatel</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+      </div>
+      <p class="text-muted" style="margin-bottom:8px">Uživatel si heslo může změnit v profilu po přihlášení.</p>
+      <div id="create-user-error" class="form-error hidden"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+        <button type="submit" class="btn btn-primary" id="create-user-btn">Vytvořit</button>
+      </div>
+    </form>
+  `)
+  document.getElementById('create-user-form').addEventListener('submit', submitCreateUser)
+}
+
+async function submitCreateUser(e) {
+  e.preventDefault()
+  const btn   = document.getElementById('create-user-btn')
+  const errEl = document.getElementById('create-user-error')
+  errEl.classList.add('hidden')
+  setLoading(btn, true)
+
+  const username = document.getElementById('cu-username').value.trim().toLowerCase()
+  const name     = document.getElementById('cu-name').value.trim()
+  const email    = document.getElementById('cu-email').value.trim()
+  const password = document.getElementById('cu-password').value
+  const role     = document.getElementById('cu-role').value
+
+  const { data, error } = await db.functions.invoke('create-user', {
+    body: { username, name, email, password, role }
+  })
+
+  const errMsg = data?.error || error?.message
+  if (errMsg) {
+    errEl.textContent = errMsg
+    errEl.classList.remove('hidden')
+    setLoading(btn, false)
+    return
+  }
+
+  showToast(`Uživatel ${esc(name)} byl vytvořen.`)
+  closeModal()
 }
 
 // ── Klávesové zkratky ─────────────────────────────────────────
