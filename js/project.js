@@ -519,9 +519,6 @@ async function openTaskDetail(taskId) {
                    <button class="btn-icon" data-path="${esc(task.file_path)}" onclick="copyPath(this.dataset.path)" title="Kopírovat">📋</button>
                  </div>`
               : '<span class="text-muted">–</span>'}
-          ${canEdit && task.file_path
-            ? `<div style="margin-top:4px"><button class="btn-icon" data-path="${esc(task.file_path)}" onclick="copyPath(this.dataset.path)">📋 Kopírovat cestu</button></div>`
-            : ''}
         </div>
 
         ${canEdit ? `

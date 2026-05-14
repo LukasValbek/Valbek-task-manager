@@ -258,7 +258,7 @@ async function addMyComment(taskId) {
   showToast('Komentář odeslán.')
 }
 
-async function deleteMyComment(commentId, taskId) {
+async function deleteMyComment(commentId, taskId, _projId) {
   if (!await confirmDialog('Smazat komentář?', { confirmLabel: 'Smazat', danger: true })) return
   const { error } = await db.from('comments').delete().eq('id', commentId)
   if (error) { showError(error.message); return }
