@@ -165,7 +165,7 @@ async function openCreateProject() {
 
   // Načti šablony – z 3DMax model_subs + z subproject_templates
   const [refRes, tplRes] = await Promise.all([
-    db.from('reference_items').select('id, name, sort_order')
+    db.from('reference_items').select('id, code, name, sort_order')
       .eq('page', '3dmax').eq('section', 'model_subs').order('sort_order'),
     db.from('subproject_templates').select('id, name, sort_order').order('sort_order')
   ])
@@ -205,8 +205,8 @@ async function openCreateProject() {
             <div class="checkbox-group checkbox-group-compact">
               ${refItems.map(r => `
                 <label class="checkbox-label">
-                  <input type="checkbox" name="tpl-ref" value="${esc(r.name)}">
-                  ${esc(r.name)}
+                  <input type="checkbox" name="tpl-ref" value="${esc((r.code ? r.code + ' ' : '') + r.name)}">
+                  ${esc((r.code ? r.code + ' ' : '') + r.name)}
                 </label>
               `).join('')}
             </div>
