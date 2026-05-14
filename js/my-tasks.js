@@ -26,7 +26,7 @@ async function init() {
 async function loadMyTasks() {
   const { data: tasks, error } = await db
     .from('tasks')
-    .select('*, comments(count), project:project_id(id, name), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name)')
+    .select('*, comments(count), project:project_id(id, name), subproject:subproject_id(id, name), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name)')
     .eq('assigned_to', currentProfile.id)
     .order('due_date', { ascending: true, nullsFirst: false })
 
@@ -82,7 +82,7 @@ function renderMyTasks(tasks) {
   container.innerHTML = Object.values(byProject).map(group => `
     <div class="task-group">
       <h3 class="task-group-title">
-        <a href="project.html?id=${group.tasks[0].project_id}">${esc(group.name)}</a>
+        <a href="project.html#${group.tasks[0].project_id}">${esc(group.name)}</a>
       </h3>
       <table class="task-table">
         <thead>
@@ -102,6 +102,7 @@ function renderMyTasks(tasks) {
                   onclick="openMyTaskDetail('${t.id}', '${t.project_id}')">
                 <td class="task-title-cell">
                   <span class="task-title">${esc(t.title)}</span>${commentCount > 0 ? `<span class="comment-count">💬 ${commentCount}</span>` : ''}
+                  ${t.subproject?.name ? `<span class="subproj-chip-inline">${esc(t.subproject.name)}</span>` : ''}
                   ${t.description ? `<span class="task-desc-preview">${esc(t.description.substring(0, 60))}${t.description.length > 60 ? '…' : ''}</span>` : ''}
                 </td>
                 <td class="editable-cell" onclick="inlineStatus(event,'${t.id}','${t.status}')" title="Kliknutím změnit">${statusBadge(t.status)}</td>
@@ -156,7 +157,7 @@ async function openMyTaskDetail(taskId, projId) {
       <h2>${esc(task.title)}</h2>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
-    <p class="text-muted">Projekt: <a href="project.html?id=${task.project_id}">${esc(task.project?.name || '–')}</a></p>
+    <p class="text-muted">Projekt: <a href="project.html#${task.project_id}">${esc(task.project?.name || '–')}</a></p>
 
     <div class="task-detail-grid">
       <div class="task-detail-main">

@@ -2,6 +2,7 @@ let allProfiles    = []
 let allProjects    = []
 let realtimeChannel = null
 let activeFilter   = 'aktivní'
+let customSubprojects = []   // ručně přidané v create-project dialogu
 
 async function init() {
   const profile = await requireAuth()
@@ -159,7 +160,18 @@ async function renderGrid() {
 
 // ── Nový projekt ──────────────────────────────────────────────
 
-function openCreateProject() {
+async function openCreateProject() {
+  customSubprojects = []
+
+  // Načti šablony – z 3DMax model_subs + z subproject_templates
+  const [refRes, tplRes] = await Promise.all([
+    db.from('reference_items').select('id, name, sort_order')
+      .eq('page', '3dmax').eq('section', 'model_subs').order('sort_order'),
+    db.from('subproject_templates').select('id, name, sort_order').order('sort_order')
+  ])
+  const refItems = refRes.data || []
+  const tplItems = tplRes.data || []
+
   openModal(`
     <div class="modal-header">
       <h2>Nový projekt</h2>
@@ -182,6 +194,49 @@ function openCreateProject() {
         <label>Cesta k souboru (volitelná)</label>
         <input type="text" id="proj-filepath" placeholder="\\\\server\\share\\projekt">
       </div>
+
+      <div class="form-group">
+        <label>Podprojekty</label>
+        <p class="text-muted" style="margin:-4px 0 8px;font-size:12px">Zaškrtni šablony, které chceš v projektu vytvořit. Můžeš přidat i vlastní.</p>
+
+        ${refItems.length ? `
+          <div class="subproj-tpl-group">
+            <div class="subproj-tpl-title">Z 3DMax kategorií</div>
+            <div class="checkbox-group checkbox-group-compact">
+              ${refItems.map(r => `
+                <label class="checkbox-label">
+                  <input type="checkbox" name="tpl-ref" value="${esc(r.name)}">
+                  ${esc(r.name)}
+                </label>
+              `).join('')}
+            </div>
+          </div>` : ''}
+
+        ${tplItems.length ? `
+          <div class="subproj-tpl-group">
+            <div class="subproj-tpl-title">Vlastní šablony</div>
+            <div class="checkbox-group checkbox-group-compact">
+              ${tplItems.map(t => `
+                <label class="checkbox-label">
+                  <input type="checkbox" name="tpl-custom" value="${esc(t.name)}"
+                    ${t.name === 'Postprodukce' ? 'checked' : ''}>
+                  ${esc(t.name)}
+                </label>
+              `).join('')}
+            </div>
+          </div>` : ''}
+
+        <div class="subproj-tpl-group">
+          <div class="subproj-tpl-title">Vlastní podprojekt</div>
+          <div class="subproj-add-row">
+            <input type="text" id="proj-custom-sub" placeholder="Název podprojektu…"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomSubproject()}">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="addCustomSubproject()">+ Přidat</button>
+          </div>
+          <div id="proj-custom-sub-list" class="subproj-chips"></div>
+        </div>
+      </div>
+
       <div class="form-group">
         <label>Členové projektu</label>
         <div class="checkbox-group">
@@ -202,6 +257,36 @@ function openCreateProject() {
     </form>
   `)
   document.getElementById('create-project-form').addEventListener('submit', createProject)
+}
+
+function addCustomSubproject() {
+  const input = document.getElementById('proj-custom-sub')
+  if (!input) return
+  const name = input.value.trim()
+  if (!name) return
+  // duplikát?
+  const seen = new Set(customSubprojects.map(n => n.toLowerCase()))
+  if (seen.has(name.toLowerCase())) { showError('Tento podprojekt už je v seznamu.'); return }
+  customSubprojects.push(name)
+  input.value = ''
+  renderCustomSubprojectChips()
+}
+
+function removeCustomSubproject(idx) {
+  customSubprojects.splice(idx, 1)
+  renderCustomSubprojectChips()
+}
+
+function renderCustomSubprojectChips() {
+  const wrap = document.getElementById('proj-custom-sub-list')
+  if (!wrap) return
+  if (customSubprojects.length === 0) { wrap.innerHTML = ''; return }
+  wrap.innerHTML = customSubprojects.map((n, i) => `
+    <span class="subproj-chip">
+      ${esc(n)}
+      <button type="button" class="subproj-chip-x" onclick="removeCustomSubproject(${i})" title="Odebrat">✕</button>
+    </span>
+  `).join('')
 }
 
 async function createProject(e) {
@@ -232,6 +317,29 @@ async function createProject(e) {
     const memberRows = memberIds.map(uid => ({ project_id: proj.id, user_id: uid }))
     const { error: memErr } = await db.from('project_members').insert(memberRows)
     if (memErr) throw memErr
+
+    // Podprojekty z šablon (checkboxes) + vlastní (chips)
+    const fromTplRef    = Array.from(document.querySelectorAll('input[name="tpl-ref"]:checked')).map(cb => cb.value)
+    const fromTplCustom = Array.from(document.querySelectorAll('input[name="tpl-custom"]:checked')).map(cb => cb.value)
+    const allSubNames   = [...fromTplRef, ...fromTplCustom, ...customSubprojects]
+    // unikátní (case-insensitive), zachovat pořadí
+    const seen = new Set()
+    const uniqueNames = []
+    for (const n of allSubNames) {
+      const key = n.toLowerCase()
+      if (!seen.has(key)) { seen.add(key); uniqueNames.push(n) }
+    }
+    if (uniqueNames.length) {
+      const subRows = uniqueNames.map((name, i) => ({
+        project_id: proj.id,
+        name,
+        sort_order: i * 10,
+        created_by: currentProfile.id,
+      }))
+      const { error: subErr } = await db.from('subprojects').insert(subRows)
+      if (subErr) throw subErr
+    }
+    customSubprojects = []
 
     closeModal()
     showToast('Projekt vytvořen!')

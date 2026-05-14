@@ -113,7 +113,8 @@ function renderNav(activePage) {
   const isDark  = document.documentElement.getAttribute('data-theme') === 'dark'
   const adminItems = isAdmin()
     ? `<button class="btn-link" onclick="navCreateProject()">+ Nový projekt</button>
-       <button class="btn-link" onclick="openCreateUser()">+ Nový uživatel</button>`
+       <button class="btn-link" onclick="openCreateUser()">+ Nový uživatel</button>
+       <button class="btn-link" onclick="openManageSubprojectTemplates()" title="Spravovat šablony podprojektů">⚙ Šablony</button>`
     : ''
   const reviewLink = isAdmin() ? `
     <a href="review.html" class="${activePage === 'review' ? 'active' : ''}">
@@ -710,6 +711,132 @@ async function submitCreateUser(e) {
   }
 
   showToast(`Uživatel ${esc(name)} byl vytvořen.`)
+  closeModal()
+}
+
+// ── Šablony podprojektů (admin) ───────────────────────────────
+
+let _spTplCache = []
+
+async function openManageSubprojectTemplates() {
+  if (!isAdmin()) return
+  const { data, error } = await db
+    .from('subproject_templates')
+    .select('*')
+    .order('sort_order', { ascending: true })
+  if (error) { showError(error.message); return }
+  _spTplCache = data || []
+
+  openModal(`
+    <div class="modal-header">
+      <h2>Šablony podprojektů</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <p class="text-muted" style="margin-bottom:12px">Šablony, které se nabízejí při vytváření nového projektu. Kategorie z 3DMax se přidávají automaticky.</p>
+
+    <div id="sp-tpl-list" class="sp-edit-list">
+      ${_spTplCache.length
+        ? _spTplCache.map((t, i) => _renderSpTplRow(t, i)).join('')
+        : '<p class="text-muted" style="margin:6px 0">Zatím žádné vlastní šablony.</p>'}
+    </div>
+
+    <div class="subproj-add-row" style="margin-top:12px">
+      <input type="text" id="sp-tpl-new-name" placeholder="Název nové šablony…"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();addSpTemplate()}">
+      <button type="button" class="btn btn-sm btn-secondary" onclick="addSpTemplate()">+ Přidat</button>
+    </div>
+
+    <div id="sp-tpl-error" class="form-error hidden"></div>
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>
+      <button class="btn btn-primary" onclick="saveSpTemplates()">Uložit změny</button>
+    </div>
+  `)
+}
+
+function _renderSpTplRow(t, i) {
+  return `
+    <div class="sp-row" data-id="${t.id}">
+      <span class="sp-order">${i + 1}.</span>
+      <input type="text" class="sp-name-input" value="${esc(t.name)}">
+      <div class="sp-row-actions">
+        <button type="button" class="btn-icon" onclick="moveSpTemplate('${t.id}',-1)" title="Nahoru">▲</button>
+        <button type="button" class="btn-icon" onclick="moveSpTemplate('${t.id}',1)"  title="Dolů">▼</button>
+        <button type="button" class="btn-icon btn-danger" onclick="deleteSpTemplate('${t.id}')" title="Smazat">✕</button>
+      </div>
+    </div>`
+}
+
+function _readSpTplOrder() {
+  return Array.from(document.querySelectorAll('#sp-tpl-list .sp-row')).map(r => ({
+    id:   r.dataset.id,
+    name: r.querySelector('.sp-name-input')?.value.trim() || '',
+  }))
+}
+
+function moveSpTemplate(id, dir) {
+  const list = _readSpTplOrder()
+  const idx  = list.findIndex(x => x.id === id)
+  const tgt  = idx + dir
+  if (idx < 0 || tgt < 0 || tgt >= list.length) return
+  const [item] = list.splice(idx, 1)
+  list.splice(tgt, 0, item)
+  const wrap = document.getElementById('sp-tpl-list')
+  if (!wrap) return
+  const lookup = Object.fromEntries(_spTplCache.map(t => [t.id, t]))
+  const reordered = list.map(x => ({ ...(lookup[x.id] || { id: x.id }), name: x.name }))
+  wrap.innerHTML = reordered.map((t, i) => _renderSpTplRow(t, i)).join('')
+}
+
+async function addSpTemplate() {
+  const input = document.getElementById('sp-tpl-new-name')
+  const name = input?.value.trim()
+  if (!name) return
+  const errEl = document.getElementById('sp-tpl-error')
+  errEl.classList.add('hidden')
+  const nextOrder = (_spTplCache.length) * 10
+  const { error } = await db.from('subproject_templates').insert({ name, sort_order: nextOrder })
+  if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); return }
+  input.value = ''
+  await openManageSubprojectTemplates()
+}
+
+async function deleteSpTemplate(id) {
+  if (!await confirmDialog('Smazat šablonu?', { confirmLabel: 'Smazat', danger: true })) {
+    return openManageSubprojectTemplates()
+  }
+  const { error } = await db.from('subproject_templates').delete().eq('id', id)
+  if (error) { showError(error.message); return openManageSubprojectTemplates() }
+  showToast('Šablona smazána.')
+  openManageSubprojectTemplates()
+}
+
+async function saveSpTemplates() {
+  const errEl = document.getElementById('sp-tpl-error')
+  errEl.classList.add('hidden')
+  const rows = _readSpTplOrder()
+  for (const r of rows) {
+    if (!r.name) { errEl.textContent = 'Název nesmí být prázdný.'; errEl.classList.remove('hidden'); return }
+  }
+  const seen = new Set()
+  for (const r of rows) {
+    const k = r.name.toLowerCase()
+    if (seen.has(k)) { errEl.textContent = `Duplicitní název: ${r.name}`; errEl.classList.remove('hidden'); return }
+    seen.add(k)
+  }
+  const updates = []
+  rows.forEach((r, i) => {
+    const orig = _spTplCache.find(t => t.id === r.id)
+    if (!orig) return
+    if (orig.name !== r.name || orig.sort_order !== i * 10) {
+      updates.push(db.from('subproject_templates').update({ name: r.name, sort_order: i * 10 }).eq('id', r.id))
+    }
+  })
+  if (updates.length === 0) { closeModal(); return }
+  const results = await Promise.all(updates)
+  const errs = results.filter(x => x.error)
+  if (errs.length) { errEl.textContent = errs[0].error.message; errEl.classList.remove('hidden'); return }
+  showToast('Šablony uloženy.')
   closeModal()
 }
 

@@ -1,6 +1,7 @@
 let projectId      = null
 let projectData    = null
 let projectMembers = []
+let projectSubprojects = []  // [{id, name, sort_order, project_id}]
 let allTasks       = []
 let realtimeChannels = []
 let pendingImageBlob     = null
@@ -33,6 +34,7 @@ async function init() {
     initKeyboardShortcuts()
 
     await loadProjectData()
+    await loadProjectSubprojects()
     await renderTasks()
     setupFilters()
     subscribeRealtime()
@@ -88,6 +90,7 @@ async function loadProjectData() {
     </div>
     ${isAdmin() ? `
       <div class="members-actions">
+        <button class="btn btn-sm btn-secondary" onclick="openManageSubprojects()">Spravovat podprojekty</button>
         <button class="btn btn-sm btn-secondary" onclick="openManageMembers()">Spravovat členy</button>
         ${!isDone ? `<button class="btn btn-sm btn-primary" onclick="openCreateTask()">+ Přidat úkol</button>` : ''}
       </div>
@@ -104,13 +107,42 @@ async function loadProjectData() {
   })
 }
 
+// ── Podprojekty ───────────────────────────────────────────────
+
+async function loadProjectSubprojects() {
+  const { data, error } = await db
+    .from('subprojects')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('sort_order', { ascending: true })
+  projectSubprojects = error ? [] : (data || [])
+
+  // Naplnit filter select
+  const sel = document.getElementById('filter-subproject')
+  if (sel) {
+    const current = sel.value
+    sel.innerHTML = `
+      <option value="">Všechny podprojekty</option>
+      ${projectSubprojects.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}
+      <option value="__none__">Bez podprojektu</option>
+    `
+    sel.value = current
+  }
+}
+
+function getSubprojectName(id) {
+  if (!id) return 'Bez podprojektu'
+  return projectSubprojects.find(s => s.id === id)?.name || 'Bez podprojektu'
+}
+
 // ── Úkoly ─────────────────────────────────────────────────────
 
 function buildTaskQuery(offset) {
-  const filterUser     = document.getElementById('filter-user')?.value || ''
-  const filterStatus   = document.getElementById('filter-status')?.value || ''
-  const filterPriority = document.getElementById('filter-priority')?.value || ''
-  const search         = (document.getElementById('search-tasks')?.value || '').trim()
+  const filterUser       = document.getElementById('filter-user')?.value || ''
+  const filterStatus     = document.getElementById('filter-status')?.value || ''
+  const filterPriority   = document.getElementById('filter-priority')?.value || ''
+  const filterSubproject = document.getElementById('filter-subproject')?.value || ''
+  const search           = (document.getElementById('search-tasks')?.value || '').trim()
 
   let q = db
     .from('tasks')
@@ -123,6 +155,8 @@ function buildTaskQuery(offset) {
   if (filterUser)     q = q.eq('assigned_to', filterUser)
   if (filterStatus)   q = q.eq('status', filterStatus)
   if (filterPriority) q = q.eq('priority', filterPriority)
+  if (filterSubproject === '__none__') q = q.is('subproject_id', null)
+  else if (filterSubproject)           q = q.eq('subproject_id', filterSubproject)
   if (search)         q = q.or(`title.ilike.%${search}%,description.ilike.%${search}%`)
 
   return q
@@ -177,12 +211,10 @@ async function loadMoreTasks() {
   taskOffset += tasks.length
   taskHasMore = tasks.length === BATCH_SIZE
 
-  const tbody = document.getElementById('task-tbody')
-  if (tbody) tbody.insertAdjacentHTML('beforeend', tasks.map(renderTaskRow).join(''))
+  // Skupin je víc — překreslit list (uloží se scroll v rámci stránky díky absolutním pozicím)
+  renderTaskList(allTasks)
 
-  if (sentinel) sentinel.innerHTML = ''
   if (taskHasMore) setupSentinel()
-  else if (sentinel) sentinel.remove()
 }
 
 function setupSentinel() {
@@ -245,17 +277,100 @@ function renderTaskRow(t) {
 function renderTaskList(tasks) {
   const container = document.getElementById('tasks-container')
 
-  if (tasks.length === 0) {
-    container.innerHTML = '<div class="empty-state">Žádné úkoly odpovídají filtru.</div>'
-    return
-  }
-
   const bulkAssignedSelect = isAdmin()
     ? `<select id="bulk-assigned" onchange="bulkApplyAssigned()">
         <option value="">Přiřadit…</option>
         ${memberOptions(projectMembers, '')}
       </select>`
     : ''
+
+  // Skupiny: každý podprojekt + případná skupina "Bez podprojektu"
+  const filterSub = document.getElementById('filter-subproject')?.value || ''
+  let groups
+  if (filterSub === '__none__') {
+    groups = [{ id: null, name: 'Bez podprojektu', tasks: tasks.filter(t => !t.subproject_id) }]
+  } else if (filterSub) {
+    const sp = projectSubprojects.find(s => s.id === filterSub)
+    groups = sp ? [{ id: sp.id, name: sp.name, tasks: tasks.filter(t => t.subproject_id === sp.id) }] : []
+  } else {
+    groups = projectSubprojects.map(sp => ({
+      id: sp.id,
+      name: sp.name,
+      tasks: tasks.filter(t => t.subproject_id === sp.id),
+    }))
+    const orphanTasks = tasks.filter(t => !t.subproject_id)
+    if (orphanTasks.length > 0 || projectSubprojects.length === 0) {
+      groups.push({ id: null, name: 'Bez podprojektu', tasks: orphanTasks })
+    }
+  }
+
+  // Stav rozbalení (localStorage)
+  const collapseKey = `tm-collapsed:${projectId}`
+  let collapsed
+  try { collapsed = new Set(JSON.parse(localStorage.getItem(collapseKey) || '[]')) }
+  catch { collapsed = new Set() }
+
+  const isDone = projectData?.status === 'dokončeno'
+  const canAdd = !isDone
+
+  const groupsHtml = groups.map(g => {
+    const total  = g.tasks.length
+    const done   = g.tasks.filter(t => t.status === 'hotovo').length
+    const pct    = total ? Math.round(done / total * 100) : 0
+    const key    = g.id || '__none__'
+    const isCol  = collapsed.has(key)
+    const addBtn = canAdd
+      ? `<button class="btn btn-sm btn-secondary subproj-add-btn"
+                 onclick="event.stopPropagation();openCreateTask('${g.id || ''}')">+ Úkol</button>`
+      : ''
+
+    return `
+      <section class="subproj-section ${isCol ? 'is-collapsed' : ''}" data-subproject="${g.id || ''}">
+        <header class="subproj-header" onclick="toggleSubprojectCollapse('${key}')">
+          <span class="subproj-toggle">▾</span>
+          <h3 class="subproj-name">${esc(g.name)}</h3>
+          <span class="subproj-count">${total} úkol${total === 1 ? '' : (total < 5 ? 'y' : 'ů')}</span>
+          ${total ? `
+            <div class="subproj-progress-wrap" title="${pct}% hotovo">
+              <div class="subproj-progress-bar" style="width:${pct}%"></div>
+            </div>
+            <span class="subproj-pct">${pct}%</span>` : ''}
+          <span class="subproj-spacer"></span>
+          ${addBtn}
+        </header>
+        <div class="subproj-body">
+          ${total === 0
+            ? `<div class="empty-state empty-state-sm">Žádné úkoly v této skupině.</div>`
+            : `<table class="task-table">
+                 <thead>
+                   <tr>
+                     <th class="col-drag"></th>
+                     <th class="col-checkbox"></th>
+                     <th>Úkol</th>
+                     <th>Přiřazený</th>
+                     <th>Stav</th>
+                     <th>Priorita</th>
+                     <th>Termín</th>
+                     <th class="col-filepath" title="Cesta k souboru">📁</th>
+                   </tr>
+                 </thead>
+                 <tbody class="task-tbody" data-subproject="${g.id || ''}">
+                   ${g.tasks.map(renderTaskRow).join('')}
+                 </tbody>
+               </table>`}
+        </div>
+      </section>
+    `
+  }).join('')
+
+  if (tasks.length === 0 && projectSubprojects.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        Tento projekt zatím nemá žádné podprojekty ani úkoly.
+        ${isAdmin() ? `<div style="margin-top:8px"><button class="btn btn-sm btn-secondary" onclick="openManageSubprojects()">Vytvořit podprojekt</button></div>` : ''}
+      </div>`
+    return
+  }
 
   container.innerHTML = `
     <div id="bulk-action-bar" class="bulk-action-bar hidden">
@@ -268,41 +383,40 @@ function renderTaskList(tasks) {
       <button class="btn btn-sm btn-danger" onclick="bulkDelete()">🗑 Smazat</button>
       <button class="btn btn-sm btn-secondary" onclick="clearBulkSelection()">✕ Zrušit výběr</button>
     </div>
-    <table class="task-table">
-      <thead>
-        <tr>
-          <th class="col-drag"></th>
-          <th class="col-checkbox">
-            <input type="checkbox" class="task-cb" id="cb-all" onchange="toggleAllCheckboxes(this.checked)" title="Vybrat vše">
-          </th>
-          <th>Úkol</th>
-          <th>Přiřazený</th>
-          <th>Stav</th>
-          <th>Priorita</th>
-          <th>Termín</th>
-          <th class="col-filepath" title="Cesta k souboru">📁</th>
-        </tr>
-      </thead>
-      <tbody id="task-tbody">
-        ${tasks.map(renderTaskRow).join('')}
-      </tbody>
-    </table>
+    ${groupsHtml}
     <div id="load-more-sentinel"></div>
   `
+}
+
+function toggleSubprojectCollapse(key) {
+  const collapseKey = `tm-collapsed:${projectId}`
+  let collapsed
+  try { collapsed = new Set(JSON.parse(localStorage.getItem(collapseKey) || '[]')) }
+  catch { collapsed = new Set() }
+  if (collapsed.has(key)) collapsed.delete(key)
+  else collapsed.add(key)
+  localStorage.setItem(collapseKey, JSON.stringify([...collapsed]))
+  const sel = key === '__none__'
+    ? document.querySelector('.subproj-section[data-subproject=""]')
+    : document.querySelector(`.subproj-section[data-subproject="${key}"]`)
+  if (sel) sel.classList.toggle('is-collapsed')
 }
 
 function setupFilters() {
   document.getElementById('filter-user').addEventListener('change', applyFilters)
   document.getElementById('filter-status').addEventListener('change', applyFilters)
   document.getElementById('filter-priority').addEventListener('change', applyFilters)
+  document.getElementById('filter-subproject')?.addEventListener('change', applyFilters)
   document.getElementById('search-tasks').addEventListener('input', debounce(applyFilters, 300))
 }
 
 function clearFilters() {
-  document.getElementById('filter-user').value     = ''
-  document.getElementById('filter-status').value   = ''
-  document.getElementById('filter-priority').value = ''
-  document.getElementById('search-tasks').value    = ''
+  document.getElementById('filter-user').value       = ''
+  document.getElementById('filter-status').value     = ''
+  document.getElementById('filter-priority').value   = ''
+  const sub = document.getElementById('filter-subproject')
+  if (sub) sub.value = ''
+  document.getElementById('search-tasks').value      = ''
   applyFilters()
 }
 
@@ -347,6 +461,19 @@ async function openTaskDetail(taskId) {
             <img src="${task.image_url}" class="comment-img" onclick="openImageFull('${task.image_url}')" alt="příloha">
           </div>
         ` : ''}
+
+        <!-- Podprojekt -->
+        <div class="form-group">
+          <label>Podprojekt</label>
+          ${canEdit
+            ? `<select id="td-subproject">
+                 <option value="">– bez podprojektu –</option>
+                 ${projectSubprojects.map(s =>
+                   `<option value="${s.id}" ${s.id === task.subproject_id ? 'selected' : ''}>${esc(s.name)}</option>`
+                 ).join('')}
+               </select>`
+            : `<span>${esc(getSubprojectName(task.subproject_id))}</span>`}
+        </div>
 
         <!-- Stav + Priorita -->
         <div class="form-row">
@@ -490,6 +617,8 @@ async function saveTaskEdit(taskId) {
     priority:    document.getElementById('td-priority')?.value,
     due_date:    document.getElementById('td-due')?.value || null,
   }
+  const subSel = document.getElementById('td-subproject')
+  if (subSel) updateData.subproject_id = subSel.value || null
   if (isAdmin()) {
     updateData.assigned_to = document.getElementById('td-assigned')?.value || null
   }
@@ -508,6 +637,14 @@ async function saveTaskEdit(taskId) {
       const oldVal = oldTask[field] || null
       const newVal = updateData[field] || null
       if (oldVal !== newVal) await logActivity(taskId, field, oldVal, newVal)
+    }
+    if (subSel) {
+      const oldSub = oldTask.subproject_id || null
+      const newSub = updateData.subproject_id || null
+      if (oldSub !== newSub) {
+        await logActivity(taskId, 'subproject',
+          getSubprojectName(oldSub), getSubprojectName(newSub))
+      }
     }
     if (isAdmin()) {
       const oldAssigned = oldTask.assigned_to || null
@@ -733,8 +870,11 @@ function removeTaskImage() {
 
 // ── Tvorba úkolu ──────────────────────────────────────────────
 
-function openCreateTask() {
+function openCreateTask(preselectSubprojectId = '') {
   pendingTaskImageBlob = null
+  const subOptions = projectSubprojects.map(s =>
+    `<option value="${s.id}" ${s.id === preselectSubprojectId ? 'selected' : ''}>${esc(s.name)}</option>`
+  ).join('')
   openModal(`
     <div class="modal-header">
       <h2>Nový úkol</h2>
@@ -744,6 +884,13 @@ function openCreateTask() {
       <div class="form-group">
         <label>Název úkolu</label>
         <input type="text" id="ct-title" required placeholder="Co je třeba udělat?">
+      </div>
+      <div class="form-group">
+        <label>Podprojekt</label>
+        <select id="ct-subproject">
+          <option value="">– bez podprojektu –</option>
+          ${subOptions}
+        </select>
       </div>
       <div class="form-group">
         <label>Popis (volitelný)</label>
@@ -819,17 +966,18 @@ async function createTask(e) {
 
   const maxOrder = allTasks.reduce((max, t) => Math.max(max, t.sort_order || 0), 0)
   const payload = {
-    project_id:  projectId,
-    title:       document.getElementById('ct-title').value.trim(),
-    description: document.getElementById('ct-desc').value.trim() || null,
-    status:      document.getElementById('ct-status').value,
-    priority:    document.getElementById('ct-priority').value,
-    assigned_to: document.getElementById('ct-assigned').value || null,
-    due_date:    document.getElementById('ct-due').value || null,
-    file_path:   document.getElementById('ct-filepath').value.trim() || null,
-    created_by:  currentProfile.id,
-    updated_by:  currentProfile.id,
-    sort_order:  maxOrder + 10,
+    project_id:    projectId,
+    subproject_id: document.getElementById('ct-subproject')?.value || null,
+    title:         document.getElementById('ct-title').value.trim(),
+    description:   document.getElementById('ct-desc').value.trim() || null,
+    status:        document.getElementById('ct-status').value,
+    priority:      document.getElementById('ct-priority').value,
+    assigned_to:   document.getElementById('ct-assigned').value || null,
+    due_date:      document.getElementById('ct-due').value || null,
+    file_path:     document.getElementById('ct-filepath').value.trim() || null,
+    created_by:    currentProfile.id,
+    updated_by:    currentProfile.id,
+    sort_order:    maxOrder + 10,
     image_url,
   }
 
@@ -952,6 +1100,156 @@ async function saveMembers() {
   await renderTasks()
 }
 
+// ── Správa podprojektů (admin) ────────────────────────────────
+
+async function openManageSubprojects() {
+  if (!isAdmin()) return
+  // znovu načti — abychom měli čerstvý stav
+  await loadProjectSubprojects()
+
+  openModal(`
+    <div class="modal-header">
+      <h2>Podprojekty</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <p class="text-muted" style="margin-bottom:12px">Změny názvů a pořadí ulož tlačítkem „Uložit". Smazání podprojektu se uplatní hned — úkoly v něm zůstanou jako „Bez podprojektu".</p>
+
+    <div id="sp-list" class="sp-edit-list">
+      ${projectSubprojects.length
+        ? projectSubprojects.map((s, i) => renderSubprojectRow(s, i)).join('')
+        : '<p class="text-muted" style="margin:6px 0">Zatím žádné podprojekty.</p>'}
+    </div>
+
+    <div class="subproj-add-row" style="margin-top:12px">
+      <input type="text" id="sp-new-name" placeholder="Název nového podprojektu…"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();addSubproject()}">
+      <button type="button" class="btn btn-sm btn-secondary" onclick="addSubproject()">+ Přidat</button>
+    </div>
+
+    <div id="sp-error" class="form-error hidden"></div>
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>
+      <button class="btn btn-primary" onclick="saveSubprojects()">Uložit změny</button>
+    </div>
+  `)
+}
+
+function renderSubprojectRow(sp, idx) {
+  return `
+    <div class="sp-row" data-id="${sp.id}">
+      <span class="sp-order">${idx + 1}.</span>
+      <input type="text" class="sp-name-input" value="${esc(sp.name)}" data-original="${esc(sp.name)}">
+      <div class="sp-row-actions">
+        <button type="button" class="btn-icon" onclick="moveSubproject('${sp.id}',-1)" title="Nahoru">▲</button>
+        <button type="button" class="btn-icon" onclick="moveSubproject('${sp.id}',1)"  title="Dolů">▼</button>
+        <button type="button" class="btn-icon btn-danger" onclick="deleteSubproject('${sp.id}')" title="Smazat">✕</button>
+      </div>
+    </div>
+  `
+}
+
+function _readSpListOrder() {
+  const rows = Array.from(document.querySelectorAll('#sp-list .sp-row'))
+  return rows.map(r => ({
+    id:   r.dataset.id,
+    name: r.querySelector('.sp-name-input')?.value.trim() || '',
+  }))
+}
+
+function moveSubproject(id, dir) {
+  const list = _readSpListOrder()
+  const idx  = list.findIndex(x => x.id === id)
+  const tgt  = idx + dir
+  if (idx < 0 || tgt < 0 || tgt >= list.length) return
+  const [item] = list.splice(idx, 1)
+  list.splice(tgt, 0, item)
+  // znovu vykresli list – ale zachovat hodnoty v inputech
+  const wrap = document.getElementById('sp-list')
+  if (!wrap) return
+  // Najdi původní objekty (kvůli rerender)
+  const lookup = Object.fromEntries(projectSubprojects.map(s => [s.id, s]))
+  // Aktualizuj projectSubprojects v paměti dočasně dle nového pořadí (s aktuálními názvy)
+  const reorderedTmp = list.map(x => ({ ...(lookup[x.id] || { id: x.id }), name: x.name }))
+  wrap.innerHTML = reorderedTmp.map((s, i) => renderSubprojectRow(s, i)).join('')
+}
+
+async function addSubproject() {
+  const input = document.getElementById('sp-new-name')
+  const name = input?.value.trim()
+  if (!name) return
+  const errEl = document.getElementById('sp-error')
+  errEl.classList.add('hidden')
+  // ulož ručně přidané + uložit existující editace najednou? raději hned vlož
+  const nextOrder = (_readSpListOrder().length) * 10
+  const { data, error } = await db.from('subprojects').insert({
+    project_id: projectId,
+    name,
+    sort_order: nextOrder,
+    created_by: currentProfile.id,
+  }).select().single()
+  if (error) { errEl.textContent = error.message; errEl.classList.remove('hidden'); return }
+  input.value = ''
+  await loadProjectSubprojects()
+  // znovu otevřít modál se zachováním rozdělané editace neimplementujeme — překreslíme list
+  const wrap = document.getElementById('sp-list')
+  if (wrap) wrap.innerHTML = projectSubprojects.map((s, i) => renderSubprojectRow(s, i)).join('')
+}
+
+async function deleteSubproject(id) {
+  const sp = projectSubprojects.find(s => s.id === id)
+  if (!sp) return
+  const cnt = allTasks.filter(t => t.subproject_id === id).length
+  const msg = cnt > 0
+    ? `Smazat podprojekt „${sp.name}"? ${cnt} úkol${cnt === 1 ? '' : (cnt < 5 ? 'y' : 'ů')} v něm zůstane jako „Bez podprojektu".`
+    : `Smazat podprojekt „${sp.name}"?`
+  if (!await confirmDialog(msg, { confirmLabel: 'Smazat', danger: true })) {
+    // confirmDialog zavře modál – znovu otevřít
+    return openManageSubprojects()
+  }
+  const { error } = await db.from('subprojects').delete().eq('id', id)
+  if (error) { showError(error.message); return openManageSubprojects() }
+  showToast('Podprojekt smazán.')
+  await loadProjectSubprojects()
+  await renderTasks()
+  openManageSubprojects()
+}
+
+async function saveSubprojects() {
+  const errEl = document.getElementById('sp-error')
+  errEl.classList.add('hidden')
+  const rows = _readSpListOrder()
+
+  // Validace
+  for (const r of rows) {
+    if (!r.name) { errEl.textContent = 'Název nesmí být prázdný.'; errEl.classList.remove('hidden'); return }
+  }
+  const seen = new Set()
+  for (const r of rows) {
+    const k = r.name.toLowerCase()
+    if (seen.has(k)) { errEl.textContent = `Duplicitní název: ${r.name}`; errEl.classList.remove('hidden'); return }
+    seen.add(k)
+  }
+
+  // Diff vůči projectSubprojects a postupně updatuj
+  const updates = []
+  rows.forEach((r, i) => {
+    const orig = projectSubprojects.find(s => s.id === r.id)
+    if (!orig) return
+    if (orig.name !== r.name || orig.sort_order !== i * 10) {
+      updates.push(db.from('subprojects').update({ name: r.name, sort_order: i * 10 }).eq('id', r.id))
+    }
+  })
+  if (updates.length === 0) { closeModal(); return }
+
+  const results = await Promise.all(updates)
+  const errs = results.filter(x => x.error)
+  if (errs.length) { errEl.textContent = errs[0].error.message; errEl.classList.remove('hidden'); return }
+  showToast('Podprojekty uloženy.')
+  closeModal()
+  await loadProjectSubprojects()
+  await renderTasks()
+}
+
 // ── Aktivitní log ─────────────────────────────────────────────
 
 function switchTaskTab(tab, taskId) {
@@ -980,7 +1278,7 @@ async function loadActivityLog(taskId) {
 }
 
 function renderActivityItem(a) {
-  const fieldLabels = { status: 'Stav', priority: 'Priorita', due_date: 'Termín', assigned_to: 'Přiřazený', file_path: 'Cesta', created: 'Vytvoření' }
+  const fieldLabels = { status: 'Stav', priority: 'Priorita', due_date: 'Termín', assigned_to: 'Přiřazený', file_path: 'Cesta', subproject: 'Podprojekt', created: 'Vytvoření' }
   const fieldLabel = fieldLabels[a.field] || a.field
 
   let changeHtml
@@ -1243,6 +1541,16 @@ async function handleDrop(event, taskId) {
   event.preventDefault()
   if (!dragSrcId || dragSrcId === taskId) return
 
+  const srcTask = allTasks.find(t => t.id === dragSrcId)
+  const dstTask = allTasks.find(t => t.id === taskId)
+  if (!srcTask || !dstTask) return
+
+  // Přesun mezi podprojekty řeš v detailu úkolu
+  if ((srcTask.subproject_id || null) !== (dstTask.subproject_id || null)) {
+    showError('Pro přesun do jiného podprojektu otevři úkol a změň „Podprojekt".')
+    return
+  }
+
   const srcIdx = allTasks.findIndex(t => t.id === dragSrcId)
   const dstIdx = allTasks.findIndex(t => t.id === taskId)
   if (srcIdx === -1 || dstIdx === -1) return
@@ -1250,9 +1558,7 @@ async function handleDrop(event, taskId) {
   const [moved] = allTasks.splice(srcIdx, 1)
   allTasks.splice(dstIdx, 0, moved)
 
-  const tbody = document.getElementById('task-tbody')
-  if (tbody) tbody.innerHTML = allTasks.map(renderTaskRow).join('')
-
+  renderTaskList(allTasks)
   scheduleSaveDragOrder()
 }
 
@@ -1277,6 +1583,11 @@ function subscribeRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks',
         filter: `project_id=eq.${projectId}` }, async (payload) => {
       await renderTasks()
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'subprojects',
+        filter: `project_id=eq.${projectId}` }, async () => {
+      await loadProjectSubprojects()
+      renderTaskList(allTasks)
     })
     .subscribe()
   realtimeChannels.push(ch)

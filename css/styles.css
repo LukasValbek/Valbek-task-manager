@@ -1776,3 +1776,227 @@ kbd {
   color: var(--brand);
 }
 .attach-upload-area input { display: none; }
+
+/* ──────────────────────────────────────────────────────────────
+   PODPROJEKTY – sbalitelné sekce v projektu
+────────────────────────────────────────────────────────────── */
+.subproj-section {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.subproj-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  transition: background .12s;
+}
+
+.subproj-header:hover { background: var(--bg); }
+
+.subproj-toggle {
+  font-size: 11px;
+  color: var(--text-muted);
+  width: 14px;
+  display: inline-block;
+  transition: transform .18s;
+}
+
+.subproj-section.is-collapsed .subproj-toggle { transform: rotate(-90deg); }
+.subproj-section.is-collapsed .subproj-body  { display: none; }
+.subproj-section.is-collapsed .subproj-header { border-bottom: none; }
+
+.subproj-name {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text);
+}
+
+.subproj-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.subproj-progress-wrap {
+  flex: 0 1 120px;
+  height: 6px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.subproj-progress-bar {
+  height: 100%;
+  background: var(--brand);
+  transition: width .25s;
+}
+
+.subproj-pct {
+  font-size: 12px;
+  color: var(--text-muted);
+  width: 36px;
+  text-align: right;
+}
+
+.subproj-spacer { flex: 1; }
+
+.subproj-add-btn { white-space: nowrap; }
+
+.subproj-body { padding: 0; }
+.subproj-body .task-table { margin: 0; }
+
+.empty-state-sm {
+  padding: 14px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ── Nový projekt – šablony podprojektů ─────────────────────── */
+.subproj-tpl-group {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--bg);
+}
+
+.subproj-tpl-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 8px;
+}
+
+.checkbox-group-compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 4px 14px;
+}
+
+.subproj-add-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.subproj-add-row input {
+  flex: 1;
+}
+
+.subproj-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.subproj-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 10px;
+  background: var(--brand-light);
+  color: var(--brand);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.subproj-chip-x {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--brand);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 50%;
+}
+
+.subproj-chip-x:hover { background: rgba(0,0,0,.06); }
+
+/* Štítek podprojektu u úkolu (např. v my-tasks) */
+.subproj-chip-inline {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  background: var(--brand-light);
+  color: var(--brand);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+/* ── Modál Spravovat podprojekty / Šablony ──────────────────── */
+.sp-edit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.sp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.sp-order {
+  font-size: 12px;
+  color: var(--text-muted);
+  width: 22px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.sp-name-input {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text);
+}
+
+.sp-row-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .subproj-header { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
+  .subproj-progress-wrap { flex: 1 1 100%; order: 10; }
+  .subproj-pct { order: 9; }
+  .checkbox-group-compact { grid-template-columns: 1fr 1fr; }
+}
