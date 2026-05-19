@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { supabase } from '@/lib/supabase'
@@ -66,7 +66,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ConfirmDialogProvider>
-      <BrowserRouter>
+      <HashRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<AuthGuard><DashboardPage /></AuthGuard>} />
@@ -77,7 +77,7 @@ export default function App() {
           <Route path="/review" element={<AuthGuard><AdminGuard><ReviewPage /></AdminGuard></AuthGuard>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
       <Toaster position="bottom-right" richColors />
       </ConfirmDialogProvider>
     </QueryClientProvider>
