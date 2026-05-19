@@ -19,6 +19,7 @@ import { InlineSelect, InlineDateInput } from '@/components/ui/InlineEdit'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
+import { ManageTaskTemplatesModal } from '@/components/ui/TaskTemplatesModal'
 import {
   formatDate, formatDateTime, isOverdue,
   STATUS_LABELS, PRIORITY_LABELS, copyToClipboard,
@@ -445,6 +446,15 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState('')
 
+  const { data: templates = [] } = useQuery({
+    queryKey: ['task-templates'],
+    queryFn: async () => {
+      const { data } = await supabase.from('task_templates').select('*').order('name')
+      return (data || []) as import('@/lib/types').TaskTemplate[]
+    },
+    enabled: open,
+  })
+
   useEffect(() => {
     if (open) {
       setTitle(''); setDesc(''); setStatus('neudělano'); setPriority('medium')
@@ -483,6 +493,19 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
   return (
     <Modal open={open} onClose={onClose} title="Nový úkol" size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {templates.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Z šablony</label>
+            <select defaultValue="" onChange={e => {
+              const t = templates.find(t => t.id === e.target.value)
+              if (t) { setTitle(t.title); setDesc(t.description ?? ''); setPriority(t.priority) }
+              e.currentTarget.value = ''
+            }} className={inputClass}>
+              <option value="">— vybrat šablonu —</option>
+              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Název úkolu *</label>
           <input required value={title} onChange={e => setTitle(e.target.value)} placeholder="Co je třeba udělat?" className={inputClass} />
@@ -1003,7 +1026,8 @@ export function ProjectPage() {
   const [createSubId,     setCreateSubId]     = useState('')
   const [showEditProject,       setShowEditProject]       = useState(false)
   const [showManageSubprojects, setShowManageSubprojects] = useState(false)
-  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
+  const [selectedTaskIds,   setSelectedTaskIds]   = useState<Set<string>>(new Set())
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false)
 
   // ── Data queries ───────────────────────────────────────────
 
@@ -1207,7 +1231,7 @@ export function ProjectPage() {
 
   if (!project) {
     return (
-      <PageLayout>
+      <PageLayout onManageTemplates={admin ? () => setShowTemplatesModal(true) : undefined}>
         <div className="flex items-center justify-center py-20">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
         </div>
@@ -1376,6 +1400,8 @@ export function ProjectPage() {
         subprojects={subprojects}
         onSaved={() => queryClient.invalidateQueries({ queryKey: ['subprojects', projectId] })}
       />
+
+      <ManageTaskTemplatesModal open={showTemplatesModal} onClose={() => setShowTemplatesModal(false)} />
 
       {showEditProject && project && (
         <EditProjectModal

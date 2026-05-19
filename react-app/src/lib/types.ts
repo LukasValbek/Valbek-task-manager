@@ -111,6 +111,16 @@ export interface TaskAttachment {
   uploader?: Pick<Profile, 'id' | 'name'>
 }
 
+export interface TaskTemplate {
+  id: string
+  name: string
+  title: string
+  description: string | null
+  priority: TaskPriority
+  created_at: string
+  created_by: string | null
+}
+
 export interface ReferenceItem {
   id: string
   page: string
@@ -135,6 +145,7 @@ export type Database = {
       task_activity: { Row: TaskActivity; Insert: Omit<TaskActivity, 'id' | 'created_at'>; Update: never }
       task_attachments: { Row: TaskAttachment; Insert: Omit<TaskAttachment, 'id' | 'created_at'>; Update: never }
       reference_items: { Row: ReferenceItem; Insert: Omit<ReferenceItem, 'id'>; Update: Partial<ReferenceItem> }
+      task_templates: { Row: TaskTemplate; Insert: Omit<TaskTemplate, 'id' | 'created_at'>; Update: Partial<TaskTemplate> }
     }
     Functions: {
       get_email_by_username: {

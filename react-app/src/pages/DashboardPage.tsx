@@ -10,6 +10,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { formatDate, isOverdue, isDueSoon } from '@/lib/utils'
+import { ManageTaskTemplatesModal } from '@/components/ui/TaskTemplatesModal'
 import type { Profile, Project } from '@/lib/types'
 
 type FilterType = 'aktivní' | 'dokončeno' | 'vše'
@@ -319,7 +320,8 @@ export function DashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [filter,  setFilter]  = useState<FilterType>('aktivní')
   const [search,  setSearch]  = useState('')
-  const [showCreate, setShowCreate] = useState(false)
+  const [showCreate,    setShowCreate]    = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
 
   const admin = isAdmin()
 
@@ -401,6 +403,7 @@ export function DashboardPage() {
   return (
     <PageLayout
       onCreateProject={admin ? () => setShowCreate(true) : undefined}
+      onManageTemplates={admin ? () => setShowTemplates(true) : undefined}
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
@@ -462,6 +465,7 @@ export function DashboardPage() {
         onClose={() => setShowCreate(false)}
         profiles={profiles}
       />
+      <ManageTaskTemplatesModal open={showTemplates} onClose={() => setShowTemplates(false)} />
     </PageLayout>
   )
 }
