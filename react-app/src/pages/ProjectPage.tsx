@@ -610,7 +610,7 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
 function SortableTaskRow({ task, admin, canEdit, selected, anySelected, onToggleSelect, onOpen, onStatusChange, onPriorityChange, onDueDateChange }: {
   task: TaskWithRelations; admin: boolean; canEdit: boolean
   selected: boolean; anySelected: boolean
-  onToggleSelect: (id: string) => void
+  onToggleSelect: (id: string, shiftKey?: boolean) => void
   onOpen: () => void
   onStatusChange: (taskId: string, val: TaskStatus) => void
   onPriorityChange: (taskId: string, val: TaskPriority) => void
@@ -626,7 +626,7 @@ function SortableTaskRow({ task, admin, canEdit, selected, anySelected, onToggle
       className={`group border-b border-gray-50 dark:border-gray-800 last:border-0 cursor-pointer
         ${selected ? 'bg-indigo-50 dark:bg-indigo-900/20' : task.status === 'hotovo' ? 'bg-emerald-50/60 hover:bg-emerald-50 dark:bg-emerald-900/10 dark:hover:bg-emerald-900/20' : overdue ? 'bg-red-50/30 hover:bg-gray-50 dark:bg-red-900/5 dark:hover:bg-gray-800/50' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}
         ${isDragging ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
-      <td className="pl-1.5 pr-1 py-2.5 w-12" onClick={e => { e.stopPropagation(); onToggleSelect(task.id) }}>
+      <td className="pl-1.5 pr-1 py-2.5 w-12" onClick={e => { e.stopPropagation(); onToggleSelect(task.id, e.shiftKey) }}>
         <div className="flex items-center justify-center gap-0.5">
           {admin && !anySelected && (
             <span {...attributes} {...listeners}
@@ -635,8 +635,7 @@ function SortableTaskRow({ task, admin, canEdit, selected, anySelected, onToggle
               <GripVertical size={14} />
             </span>
           )}
-          <input type="checkbox" checked={selected} onChange={() => onToggleSelect(task.id)}
-            onClick={e => e.stopPropagation()}
+          <input type="checkbox" checked={selected} onChange={() => {}}
             className={`w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-opacity
               ${selected || anySelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
         </div>
@@ -662,7 +661,7 @@ function SortableTaskRow({ task, admin, canEdit, selected, anySelected, onToggle
           </div>
         ) : <span className="text-xs text-gray-400">–</span>}
       </td>
-      <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
+      <td className="px-3 py-2.5">
         {canEdit ? (
           <InlineSelect<TaskStatus>
             value={task.status} options={STATUS_LABELS}
@@ -671,7 +670,7 @@ function SortableTaskRow({ task, admin, canEdit, selected, anySelected, onToggle
           />
         ) : <StatusBadge status={task.status} />}
       </td>
-      <td className="px-3 py-2.5 hidden md:table-cell" onClick={e => e.stopPropagation()}>
+      <td className="px-3 py-2.5 hidden md:table-cell">
         {canEdit ? (
           <InlineSelect<TaskPriority>
             value={task.priority} options={PRIORITY_LABELS}
@@ -680,15 +679,15 @@ function SortableTaskRow({ task, admin, canEdit, selected, anySelected, onToggle
           />
         ) : <PriorityBadge priority={task.priority} />}
       </td>
-      <td className="px-3 py-2.5 hidden lg:table-cell" onClick={e => e.stopPropagation()}>
+      <td className="px-3 py-2.5 hidden lg:table-cell">
         {canEdit
           ? <InlineDateInput value={task.due_date} onChange={val => onDueDateChange(task.id, val)} />
           : <span className={`text-sm ${overdue ? 'text-red-600 dark:text-red-400 font-medium' : 'text-gray-500 dark:text-gray-400'}`}>{formatDate(task.due_date)}</span>
         }
       </td>
-      <td className="px-3 py-2.5 hidden xl:table-cell" onClick={e => e.stopPropagation()}>
+      <td className="px-3 py-2.5 hidden xl:table-cell">
         {task.file_path && (
-          <button onClick={() => copyToClipboard(task.file_path!).then(ok => ok && toast.success('Cesta zkopírována!'))}
+          <button onClick={e => { e.stopPropagation(); copyToClipboard(task.file_path!).then(ok => ok && toast.success('Cesta zkopírována!')) }}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
             <Copy size={13} />
           </button>
@@ -704,7 +703,7 @@ function TaskGroup({ group, admin, profile, selectedTaskIds, onToggleSelect, onT
   group: { id: string | null; name: string; tasks: TaskWithRelations[] }
   admin: boolean; profile: { id: string } | null
   selectedTaskIds: Set<string>
-  onToggleSelect: (id: string) => void
+  onToggleSelect: (id: string, shiftKey?: boolean) => void
   onToggleGroup: (ids: string[]) => void
   onOpenTask: (task: TaskWithRelations) => void
   onCreateTask: (subprojectId: string) => void
@@ -1078,6 +1077,7 @@ export function ProjectPage() {
   const [selectedTaskIds,   setSelectedTaskIds]   = useState<Set<string>>(new Set())
   const [showTemplatesModal, setShowTemplatesModal] = useState(false)
   const [showBulkCreate,    setShowBulkCreate]    = useState(false)
+  const lastSelectedId = useRef<string | null>(null)
 
   // ── Data queries ───────────────────────────────────────────
 
@@ -1166,6 +1166,8 @@ export function ProjectPage() {
     return result
   }, [subprojects, filteredTasks])
 
+  const allTasksInOrder = useMemo(() => groups.flatMap(g => g.tasks), [groups])
+
   // ── Inline status/priority update ─────────────────────────
 
   async function handleStatusChange(taskId: string, val: TaskStatus) {
@@ -1204,12 +1206,24 @@ export function ProjectPage() {
 
   // ── Bulk actions ──────────────────────────────────────────
 
-  function toggleTaskSelection(id: string) {
+  function toggleTaskSelection(id: string, shiftKey = false) {
     setSelectedTaskIds(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (shiftKey && lastSelectedId.current && lastSelectedId.current !== id) {
+        const fromIdx = allTasksInOrder.findIndex(t => t.id === lastSelectedId.current)
+        const toIdx = allTasksInOrder.findIndex(t => t.id === id)
+        if (fromIdx !== -1 && toIdx !== -1) {
+          const [lo, hi] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx]
+          for (let i = lo; i <= hi; i++) next.add(allTasksInOrder[i].id)
+        } else {
+          next.has(id) ? next.delete(id) : next.add(id)
+        }
+      } else {
+        next.has(id) ? next.delete(id) : next.add(id)
+      }
       return next
     })
+    lastSelectedId.current = id
   }
 
   function toggleGroupSelection(ids: string[]) {

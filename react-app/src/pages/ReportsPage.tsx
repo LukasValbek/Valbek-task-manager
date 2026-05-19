@@ -269,16 +269,16 @@ function PersonCategoryMatrix({ tasks, subprojects, profiles }: {
 
   return (
     <div className="overflow-x-auto">
-      <table className="text-sm min-w-full">
+      <table className="text-sm min-w-full table-fixed">
         <thead>
           <tr className="border-b border-gray-100 dark:border-gray-800">
-            <th className="text-left pb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide pr-4 sticky left-0 bg-white dark:bg-gray-900 z-10 min-w-[130px]">Osoba</th>
+            <th className="text-left pb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide pr-4 sticky left-0 bg-white dark:bg-gray-900 z-10 w-36">Osoba</th>
             {categories.map(cat => (
-              <th key={cat} className="text-center pb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-3">
-                <span className="block truncate max-w-[80px]" title={cat}>{cat}</span>
+              <th key={cat} className="text-center pb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-2 w-20">
+                <span className="block truncate" title={cat}>{cat}</span>
               </th>
             ))}
-            <th className="text-center pb-2 text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide pl-3 border-l border-gray-100 dark:border-gray-800">Celkem</th>
+            <th className="text-center pb-2 text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide pl-3 border-l border-gray-100 dark:border-gray-800 w-16">Celkem</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
