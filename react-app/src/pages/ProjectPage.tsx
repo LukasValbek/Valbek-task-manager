@@ -67,6 +67,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
   const canDelete = admin || task?.created_by === profile?.id
   const confirm = useConfirm()
 
+  const [title,       setTitle]       = useState('')
   const [status,      setStatus]      = useState<TaskStatus>('neudělano')
   const [priority,    setPriority]    = useState<TaskPriority>('medium')
   const [dueDate,     setDueDate]     = useState('')
@@ -118,7 +119,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
 
   useEffect(() => {
     if (task) {
-      setStatus(task.status); setPriority(task.priority)
+      setTitle(task.title); setStatus(task.status); setPriority(task.priority)
       setDueDate(task.due_date ?? ''); setDesc(task.description ?? '')
       setSubprojectId(task.subproject_id ?? ''); setAssignedTo(task.assigned_to ?? '')
       setFilePath(task.file_path ?? ''); setError('')
@@ -159,7 +160,9 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
   async function handleSave() {
     if (!task || !profile) return
     setSaving(true); setError('')
+    if (!title.trim()) { setError('Název úkolu nesmí být prázdný.'); return }
     const updateData = {
+      title: title.trim(),
       status, priority, due_date: dueDate || null, description: desc || null,
       subproject_id: subprojectId || null, file_path: filePath.trim() || null,
       updated_by: profile.id,
@@ -226,6 +229,15 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
     <Modal open={!!task} onClose={onClose} title={task.title} size="lg">
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Název */}
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Název úkolu</label>
+            {canEdit
+              ? <input type="text" value={title} onChange={e => setTitle(e.target.value)} className={inputClass} />
+              : <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{task.title}</p>
+            }
+          </div>
+
           {/* Popis */}
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Popis</label>
@@ -1214,6 +1226,7 @@ export function ProjectPage() {
     })) return
     await supabase.from('projects').update({ status: isDone ? 'aktivní' : 'dokončeno' }).eq('id', projectId!)
     queryClient.invalidateQueries({ queryKey: ['project', projectId] })
+    queryClient.invalidateQueries({ queryKey: ['projects'] })
     toast.success(isDone ? 'Projekt znovu otevřen.' : 'Projekt dokončen.')
   }
 

@@ -114,13 +114,13 @@ function ProjectCard({ project, tasks }: { project: ProjectWithMembers; tasks: T
           )}
         </div>
         <span className={`shrink-0 text-xs font-semibold px-2 py-1 rounded-full ${
-          project.status === 'active'
+          project.status === 'aktivní'
             ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-            : project.status === 'completed'
+            : project.status === 'dokončeno'
             ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
             : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
         }`}>
-          {project.status === 'active' ? 'Aktivní' : project.status === 'completed' ? 'Dokončen' : project.status}
+          {project.status === 'aktivní' ? 'Aktivní' : project.status === 'dokončeno' ? 'Dokončen' : project.status}
         </span>
       </div>
 
@@ -278,11 +278,11 @@ export function ReportsPage() {
   const totalTasks  = allTasks.length
   const doneTasks   = allTasks.filter(t => t.status === 'hotovo').length
   const overdueTasks = allTasks.filter(isOverdue).length
-  const activeProjects = projects.filter(p => p.status === 'active').length
+  const activeProjects = projects.filter(p => p.status === 'aktivní').length
   const donePct = totalTasks === 0 ? 0 : Math.round((doneTasks / totalTasks) * 100)
 
   const activeProjectsSorted = projects
-    .filter(p => p.status === 'active')
+    .filter(p => p.status === 'aktivní')
     .sort((a, b) => {
       // Sort by due_date asc (null last), then name
       if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date)
@@ -291,7 +291,7 @@ export function ReportsPage() {
       return a.name.localeCompare(b.name)
     })
 
-  const otherProjects = projects.filter(p => p.status !== 'active')
+  const otherProjects = projects.filter(p => p.status !== 'aktivní')
 
   return (
     <PageLayout>
