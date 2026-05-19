@@ -63,18 +63,18 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
 }) {
   const { profile, isAdmin } = useAuthStore()
   const admin   = isAdmin()
-  const canEdit = admin || task?.assigned_to === profile?.id
+  const canEdit = admin || task?.assigned_to === profile?.id || task?.task_assignees?.some(a => a.user_id === profile?.id)
   const canDelete = admin || task?.created_by === profile?.id
   const confirm = useConfirm()
 
-  const [title,       setTitle]       = useState('')
-  const [status,      setStatus]      = useState<TaskStatus>('neudělano')
-  const [priority,    setPriority]    = useState<TaskPriority>('medium')
-  const [dueDate,     setDueDate]     = useState('')
-  const [desc,        setDesc]        = useState('')
-  const [subprojectId,setSubprojectId]= useState<string>('')
-  const [assignedTo,  setAssignedTo]  = useState<string>('')
-  const [filePath,    setFilePath]    = useState('')
+  const [title,          setTitle]          = useState('')
+  const [status,         setStatus]         = useState<TaskStatus>('neudělano')
+  const [priority,       setPriority]       = useState<TaskPriority>('medium')
+  const [dueDate,        setDueDate]        = useState('')
+  const [desc,           setDesc]           = useState('')
+  const [subprojectId,   setSubprojectId]   = useState<string>('')
+  const [assignedToIds,  setAssignedToIds]  = useState<string[]>([])
+  const [filePath,       setFilePath]       = useState('')
   const [saving,      setSaving]      = useState(false)
   const [comment,        setComment]        = useState('')
   const [attachedImages, setAttachedImages] = useState<string[]>([])
@@ -121,7 +121,12 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
     if (task) {
       setTitle(task.title); setStatus(task.status); setPriority(task.priority)
       setDueDate(task.due_date ?? ''); setDesc(task.description ?? '')
-      setSubprojectId(task.subproject_id ?? ''); setAssignedTo(task.assigned_to ?? '')
+      setSubprojectId(task.subproject_id ?? '')
+      setAssignedToIds(
+        task.task_assignees && task.task_assignees.length > 0
+          ? task.task_assignees.map(a => a.user_id)
+          : task.assigned_to ? [task.assigned_to] : []
+      )
       setFilePath(task.file_path ?? ''); setError('')
       setComment(''); setAttachedImages([])
     }
@@ -160,27 +165,35 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
   async function handleSave() {
     if (!task || !profile) return
     setSaving(true); setError('')
-    if (!title.trim()) { setError('Název úkolu nesmí být prázdný.'); return }
+    if (!title.trim()) { setError('Název úkolu nesmí být prázdný.'); setSaving(false); return }
+    const primaryAssignee = assignedToIds[0] || null
     const updateData = {
       title: title.trim(),
       status, priority, due_date: dueDate || null, description: desc || null,
       subproject_id: subprojectId || null, file_path: filePath.trim() || null,
       updated_by: profile.id,
-      ...(admin ? { assigned_to: assignedTo || null } : {}),
+      ...(admin ? { assigned_to: primaryAssignee } : {}),
     }
     const { error: err } = await supabase.from('tasks').update(updateData).eq('id', task.id)
-    setSaving(false)
-    if (err) { setError(err.message); return }
+    if (err) { setError(err.message); setSaving(false); return }
 
-    // Notification if assigned changed
-    if (admin && updateData.assigned_to && updateData.assigned_to !== task.assigned_to) {
-      await supabase.from('notifications').insert({
-        user_id: updateData.assigned_to, type: 'task_assigned',
-        message: `Byl/a jsi přiřazen/a k úkolu: ${task.title}`,
-        task_id: task.id, project_id: projectId,
-      })
+    if (admin) {
+      const prevIds = task.task_assignees?.map(a => a.user_id) ?? (task.assigned_to ? [task.assigned_to] : [])
+      await supabase.from('task_assignees').delete().eq('task_id', task.id)
+      if (assignedToIds.length > 0) {
+        await supabase.from('task_assignees').insert(assignedToIds.map(uid => ({ task_id: task.id, user_id: uid })))
+      }
+      const newIds = assignedToIds.filter(id => !prevIds.includes(id))
+      for (const uid of newIds) {
+        await supabase.from('notifications').insert({
+          user_id: uid, type: 'task_assigned',
+          message: `Byl/a jsi přiřazen/a k úkolu: ${task.title}`,
+          task_id: task.id, project_id: projectId,
+        })
+      }
     }
 
+    setSaving(false)
     toast.success('Úkol uložen.')
     onSaved(); onClose()
   }
@@ -263,16 +276,36 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
             )}
           </div>
 
-          {/* Přiřazený */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Přiřazený</label>
+          {/* Přiřazení */}
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Přiřazení</label>
             {admin ? (
-              <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)} className={inputClass}>
-                <option value="">– nikdo –</option>
-                {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+              <div className="flex flex-wrap gap-2">
+                {members.map(m => {
+                  const checked = assignedToIds.includes(m.id)
+                  return (
+                    <label key={m.id} className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border cursor-pointer select-none transition-colors
+                      ${checked ? 'bg-indigo-50 border-indigo-300 text-indigo-700 dark:bg-indigo-900/30 dark:border-indigo-600 dark:text-indigo-300' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>
+                      <input type="checkbox" className="sr-only" checked={checked}
+                        onChange={() => setAssignedToIds(prev => prev.includes(m.id) ? prev.filter(x => x !== m.id) : [...prev, m.id])} />
+                      <Avatar name={m.name} initials={m.initials} color={m.color} small />
+                      {m.name}
+                    </label>
+                  )
+                })}
+              </div>
             ) : (
-              <span className="text-sm text-gray-700 dark:text-gray-300">{task.assigned?.name ?? '–'}</span>
+              <div className="flex flex-wrap gap-2">
+                {task.task_assignees && task.task_assignees.length > 0
+                  ? task.task_assignees.map(a => a.profiles ? (
+                      <div key={a.user_id} className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300">
+                        <Avatar name={a.profiles.name} initials={a.profiles.initials} color={a.profiles.color} small />
+                        {a.profiles.name}
+                      </div>
+                    ) : null)
+                  : <span className="text-sm text-gray-400">–</span>
+                }
+              </div>
             )}
           </div>
 
@@ -618,10 +651,14 @@ function SortableTaskRow({ task, admin, canEdit, selected, anySelected, onToggle
         {task.description && <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{task.description}</p>}
       </td>
       <td className="px-3 py-2.5 hidden sm:table-cell">
-        {task.assigned ? (
-          <div className="flex items-center gap-1.5">
-            <Avatar name={task.assigned.name} initials={task.assigned.initials} color={task.assigned.color} small />
-            <span className="text-xs text-gray-600 dark:text-gray-300 hidden lg:block">{task.assigned.name}</span>
+        {task.task_assignees && task.task_assignees.length > 0 ? (
+          <div className="flex -space-x-1.5 items-center">
+            {task.task_assignees.slice(0, 3).map(a => a.profiles ? (
+              <Avatar key={a.user_id} name={a.profiles.name} initials={a.profiles.initials} color={a.profiles.color} small />
+            ) : null)}
+            {task.task_assignees.length > 3 && (
+              <span className="text-xs text-gray-400 pl-2">+{task.task_assignees.length - 3}</span>
+            )}
           </div>
         ) : <span className="text-xs text-gray-400">–</span>}
       </td>
@@ -1071,7 +1108,7 @@ export function ProjectPage() {
     queryKey: ['tasks', projectId],
     queryFn: async () => {
       let q = supabase.from('tasks')
-        .select('*, comments(count), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name)')
+        .select('*, comments(count), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name), task_assignees(user_id, profiles(id, name, initials, color))')
         .eq('project_id', projectId!)
         .order('sort_order', { ascending: true })
       const { data } = await q
@@ -1094,6 +1131,7 @@ export function ProjectPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` }, invalidate)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_members' }, invalidate)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'subprojects', filter: `project_id=eq.${projectId}` }, invalidate)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_assignees' }, invalidate)
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [projectId, invalidate])
@@ -1102,7 +1140,7 @@ export function ProjectPage() {
 
   const filteredTasks = useMemo(() => {
     let result = tasks
-    if (filterUser)       result = result.filter(t => t.assigned_to === filterUser)
+    if (filterUser)       result = result.filter(t => t.assigned_to === filterUser || t.task_assignees?.some(a => a.user_id === filterUser))
     if (filterStatus)     result = result.filter(t => t.status === filterStatus)
     if (filterPriority)   result = result.filter(t => t.priority === filterPriority)
     if (filterSubproject === '__none__') result = result.filter(t => !t.subproject_id)

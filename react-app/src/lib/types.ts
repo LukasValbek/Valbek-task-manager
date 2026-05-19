@@ -66,6 +66,7 @@ export interface TaskWithRelations extends Task {
   comments: { count: number }[]
   project?: Pick<Project, 'id' | 'name'>
   subproject?: Pick<Subproject, 'id' | 'name'> | null
+  task_assignees?: { user_id: string; profiles: Pick<Profile, 'id' | 'name' | 'initials' | 'color'> | null }[]
 }
 
 export interface Comment {
@@ -146,6 +147,7 @@ export type Database = {
       task_attachments: { Row: TaskAttachment; Insert: Omit<TaskAttachment, 'id' | 'created_at'>; Update: never }
       reference_items: { Row: ReferenceItem; Insert: Omit<ReferenceItem, 'id'>; Update: Partial<ReferenceItem> }
       task_templates: { Row: TaskTemplate; Insert: Omit<TaskTemplate, 'id' | 'created_at'>; Update: Partial<TaskTemplate> }
+      task_assignees: { Row: { task_id: string; user_id: string }; Insert: { task_id: string; user_id: string }; Update: never }
     }
     Functions: {
       get_email_by_username: {

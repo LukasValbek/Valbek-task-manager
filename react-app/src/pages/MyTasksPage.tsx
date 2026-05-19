@@ -24,7 +24,7 @@ function TaskDetailModal({ task, onClose, onSaved }: {
 }) {
   const { profile, isAdmin } = useAuthStore()
   const admin   = isAdmin()
-  const canEdit = admin || task?.assigned_to === profile?.id
+  const canEdit = admin || task?.assigned_to === profile?.id || task?.task_assignees?.some(a => a.user_id === profile?.id)
   const confirm = useConfirm()
 
   const [status,   setStatus]   = useState<TaskStatus>(task?.status ?? 'neudělano')
@@ -302,10 +302,14 @@ export function MyTasksPage() {
   const { data: tasks = [], isLoading } = useQuery<TaskWithRelations[]>({
     queryKey: ['my-tasks', profile?.id],
     queryFn: async () => {
+      const { data: assigneeRows } = await supabase
+        .from('task_assignees').select('task_id').eq('user_id', profile!.id)
+      const taskIds = (assigneeRows || []).map(r => r.task_id)
+      if (taskIds.length === 0) return []
       const { data } = await supabase
         .from('tasks')
-        .select('*, comments(count), project:project_id(id, name), subproject:subproject_id(id, name), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name)')
-        .eq('assigned_to', profile!.id)
+        .select('*, comments(count), project:project_id(id, name), subproject:subproject_id(id, name), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name), task_assignees(user_id, profiles(id, name, initials, color))')
+        .in('id', taskIds)
         .order('due_date', { ascending: true, nullsFirst: false })
       return (data || []) as TaskWithRelations[]
     },
