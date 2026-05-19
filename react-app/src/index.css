@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Viz grid background ─────────────────────────────────── */
+
+@keyframes grid-zoom {
+  0%   { background-size: 36px 36px; opacity: 0; }
+  8%   { opacity: 0.5; }
+  50%  { opacity: 0.5; }
+  68%  { opacity: 0; }
+  100% { background-size: 72px 72px; opacity: 0; }
+}
+
+.app-grid {
+  position: relative;
+  isolation: isolate;
+}
+
+.app-grid::before,
+.app-grid::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(99, 102, 241, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99, 102, 241, 0.05) 1px, transparent 1px);
+  background-position: center center;
+  animation: grid-zoom 30s linear infinite;
+}
+
+.app-grid::after {
+  animation-delay: -15s;
+}
+
+.dark .app-grid::before,
+.dark .app-grid::after {
+  background-image:
+    linear-gradient(rgba(129, 140, 248, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(129, 140, 248, 0.08) 1px, transparent 1px);
+}
+
+/* ─────────────────────────────────────────────────────────── */
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.page-enter {
+  animation: page-enter 0.2s ease-out both;
+}
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+    transition: background-color 0.4s ease, border-color 0.4s ease, color 0.2s ease;
+  }
+
+  body {
+    margin: 0;
+    font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    min-height: 100svh;
+  }
+}
