@@ -581,18 +581,18 @@ function SortableTaskRow({ task, admin, canEdit, selected, anySelected, onToggle
       className={`group border-b border-gray-50 dark:border-gray-800 last:border-0 cursor-pointer
         ${selected ? 'bg-indigo-50 dark:bg-indigo-900/20' : task.status === 'hotovo' ? 'bg-emerald-50/60 hover:bg-emerald-50 dark:bg-emerald-900/10 dark:hover:bg-emerald-900/20' : overdue ? 'bg-red-50/30 hover:bg-gray-50 dark:bg-red-900/5 dark:hover:bg-gray-800/50' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}
         ${isDragging ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
-      <td className="pl-2 pr-1 py-2.5 w-8" onClick={e => { e.stopPropagation(); onToggleSelect(task.id) }}>
-        <div className="relative flex items-center justify-center w-4 h-4 mx-auto">
+      <td className="pl-1.5 pr-1 py-2.5 w-12" onClick={e => { e.stopPropagation(); onToggleSelect(task.id) }}>
+        <div className="flex items-center justify-center gap-0.5">
           {admin && !anySelected && (
             <span {...attributes} {...listeners}
               onClick={e => e.stopPropagation()}
-              className="absolute inset-0 flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400 group-hover:opacity-0 transition-opacity select-none">
-              <GripVertical size={16} />
+              className="flex items-center justify-center cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 dark:text-gray-600 dark:hover:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity select-none">
+              <GripVertical size={14} />
             </span>
           )}
           <input type="checkbox" checked={selected} onChange={() => onToggleSelect(task.id)}
             onClick={e => e.stopPropagation()}
-            className={`absolute w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-opacity
+            className={`w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-opacity
               ${selected || anySelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
         </div>
       </td>
@@ -723,7 +723,7 @@ function TaskGroup({ group, admin, profile, selectedTaskIds, onToggleSelect, onT
               <table className="w-full text-sm table-fixed">
                 <thead>
                   <tr className="border-b border-gray-50 dark:border-gray-800 text-xs text-gray-400 uppercase tracking-wide">
-                    <th className="w-8 pl-2 shrink-0" />
+                    <th className="w-12 pl-1.5 shrink-0" />
                     <th className="text-left px-3 py-2 font-medium">Úkol</th>
                     <th className="text-left px-3 py-2 font-medium hidden sm:table-cell w-36">Přiřazený</th>
                     <th className="text-left px-3 py-2 font-medium w-36">Stav</th>
