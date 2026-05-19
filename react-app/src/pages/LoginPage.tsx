@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import logoUrl from '@/assets/logo.png'
 import { useAuthStore } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/Button'
@@ -64,7 +65,7 @@ export function LoginPage() {
         <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-8">
           {/* Logo */}
           <div className="flex items-center gap-3 mb-8">
-            <img src={`${import.meta.env.BASE_URL}img/logo.png`} alt="Valbek" className="h-10 w-auto" />
+            <img src={logoUrl} alt="Valbek" className="h-10 w-auto" />
             <div>
               <p className="text-xs font-semibold tracking-widest text-gray-400 uppercase">Valbek</p>
               <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100 leading-tight">

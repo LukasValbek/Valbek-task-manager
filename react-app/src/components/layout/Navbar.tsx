@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import logoUrl from '@/assets/logo.png'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, ListTodo, Box, ClipboardCheck,
@@ -112,7 +113,7 @@ export function Navbar({ onCreateProject, onCreateUser, onManageTemplates }: Nav
     <div className="flex flex-col h-full">
       {/* Logo */}
       <Link to="/dashboard" className="flex items-center gap-2.5 px-4 py-5 shrink-0">
-        <img src={`${import.meta.env.BASE_URL}img/logo.png`} alt="Valbek" className="h-7 w-auto" />
+        <img src={logoUrl} alt="Valbek" className="h-7 w-auto" />
         <span className="text-sm font-bold tracking-widest text-gray-800 dark:text-gray-100 uppercase">Vizualizace</span>
       </Link>
 
@@ -225,7 +226,7 @@ export function Navbar({ onCreateProject, onCreateUser, onManageTemplates }: Nav
           {mobileOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
         <Link to="/dashboard" className="flex items-center gap-2">
-          <img src={`${import.meta.env.BASE_URL}img/logo.png`} alt="Valbek" className="h-7 w-auto" />
+          <img src={logoUrl} alt="Valbek" className="h-7 w-auto" />
           <span className="text-sm font-bold tracking-widest text-gray-800 dark:text-gray-100 uppercase">Vizualizace</span>
         </Link>
       </header>
