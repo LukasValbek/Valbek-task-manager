@@ -241,6 +241,81 @@ function PersonTable({ tasks, profiles }: { tasks: Task[]; profiles: Profile[] }
   )
 }
 
+// ── Person × Project matrix (admin only) ─────────────────────
+
+function PersonProjectMatrix({ tasks, projects, profiles }: { tasks: Task[]; projects: ProjectWithMembers[]; profiles: Profile[] }) {
+  const activeProfiles = useMemo(() =>
+    profiles.filter(p => tasks.some(t => t.assigned_to === p.id))
+  , [tasks, profiles])
+
+  const activeProjects = useMemo(() =>
+    projects.filter(proj => tasks.some(t => t.project_id === proj.id && t.assigned_to !== null))
+      .sort((a, b) => a.name.localeCompare(b.name, 'cs'))
+  , [tasks, projects])
+
+  if (activeProfiles.length === 0 || activeProjects.length === 0) return (
+    <p className="text-sm text-gray-400 text-center py-6">Žádná data.</p>
+  )
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="text-sm min-w-full">
+        <thead>
+          <tr className="border-b border-gray-100 dark:border-gray-800">
+            <th className="text-left pb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide pr-4 sticky left-0 bg-white dark:bg-gray-900 z-10 min-w-[140px]">Osoba</th>
+            {activeProjects.map(p => (
+              <th key={p.id} className="text-center pb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide px-3 max-w-[100px]">
+                <span className="block truncate max-w-[90px]" title={p.name}>{p.name}</span>
+              </th>
+            ))}
+            <th className="text-center pb-2 text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide pl-3 border-l border-gray-100 dark:border-gray-800">Celkem</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+          {activeProfiles.map(p => {
+            const totalTasks = tasks.filter(t => t.assigned_to === p.id)
+            const totalDone  = totalTasks.filter(t => t.status === 'hotovo').length
+            const totalPct   = totalTasks.length === 0 ? 0 : Math.round((totalDone / totalTasks.length) * 100)
+            return (
+              <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                <td className="py-2.5 pr-4 sticky left-0 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800/50 z-10">
+                  <div className="flex items-center gap-2">
+                    <Avatar name={p.name} initials={p.initials ?? undefined} color={p.color ?? undefined} small />
+                    <span className="font-medium text-gray-800 dark:text-gray-200 truncate max-w-[90px]">{p.name}</span>
+                  </div>
+                </td>
+                {activeProjects.map(proj => {
+                  const pt = tasks.filter(t => t.project_id === proj.id && t.assigned_to === p.id)
+                  const pd = pt.filter(t => t.status === 'hotovo').length
+                  const pct = pt.length === 0 ? 0 : Math.round((pd / pt.length) * 100)
+                  if (pt.length === 0) return <td key={proj.id} className="py-2.5 px-3 text-center text-gray-300 dark:text-gray-700 text-xs">—</td>
+                  return (
+                    <td key={proj.id} className="py-2.5 px-3 text-center">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className={`text-xs font-semibold ${pct === 100 ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                          {pd}/{pt.length}
+                        </span>
+                        <div className="w-10 h-1 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${pct === 100 ? 'bg-green-500' : 'bg-indigo-500'}`} style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    </td>
+                  )
+                })}
+                <td className="py-2.5 pl-3 border-l border-gray-100 dark:border-gray-800 text-center">
+                  <span className={`text-xs font-bold ${totalPct === 100 ? 'text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300'}`}>
+                    {totalDone}/{totalTasks.length}
+                  </span>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 // ── Main Page ─────────────────────────────────────────────────
 
 export function ReportsPage() {
@@ -341,12 +416,21 @@ export function ReportsPage() {
 
         {/* Per person (admin only) */}
         {isAdmin && (
-          <section>
-            <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-3">Přehled podle osoby</h2>
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
-              <PersonTable tasks={allTasks} profiles={profiles} />
-            </div>
-          </section>
+          <>
+            <section>
+              <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-3">Přehled podle osoby</h2>
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
+                <PersonTable tasks={allTasks} profiles={profiles} />
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-base font-semibold text-gray-800 dark:text-gray-200 mb-3">Aktivita osoby podle projektu</h2>
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
+                <PersonProjectMatrix tasks={allTasks} projects={projects} profiles={profiles} />
+              </div>
+            </section>
+          </>
         )}
       </div>
     </PageLayout>
