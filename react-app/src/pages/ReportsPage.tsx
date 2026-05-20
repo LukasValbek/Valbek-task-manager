@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { CheckCircle2, Clock, AlertCircle, FolderOpen, TrendingUp } from 'lucide-react'
+import { CheckCircle2, Clock, AlertCircle, FolderOpen, TrendingUp, type LucideIcon } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { PageLayout } from '@/components/layout/PageLayout'
@@ -43,7 +43,7 @@ function formatDate(d: string | null) {
 
 function StatCard({ label, value, sub, Icon, color }: {
   label: string; value: string | number; sub?: string
-  Icon: React.ElementType; color: string
+  Icon: LucideIcon; color: string
 }) {
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5 flex items-start gap-4">

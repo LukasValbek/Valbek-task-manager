@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, ListTodo, Box, ClipboardCheck, BarChart2,
   Bell, Sun, Moon, Menu, X, LogOut, Plus, Users, BookTemplate, Palette, Boxes,
+  type LucideIcon,
 } from 'lucide-react'
 import { useAuthStore, applyUserBg } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
@@ -188,7 +189,7 @@ export function Navbar({ onCreateProject, onCreateUser, onManageTemplates }: Nav
 
   const isActive = (to: string) => location.pathname === to || (to === '/dashboard' && location.pathname === '/')
 
-  const navItem = (to: string, label: string, Icon: React.ElementType, badge?: number) => (
+  const navItem = (to: string, label: string, Icon: LucideIcon, badge?: number) => (
     <Link to={to}
       className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative group
         ${isActive(to)
