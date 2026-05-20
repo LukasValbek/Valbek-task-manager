@@ -51,6 +51,86 @@ function CommentText({ text, onImageClick }: { text: string; onImageClick?: (src
   )
 }
 
+// ── Inline Assignee Select ────────────────────────────────────
+
+function InlineAssigneeSelect({ assigneeIds, members, onChange }: {
+  assigneeIds: string[]
+  members: Profile[]
+  onChange: (ids: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [pending, setPending] = useState(assigneeIds)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const triggerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { if (!open) setPending(assigneeIds) }, [open, assigneeIds])
+
+  function commit() { onChange(pending); setOpen(false) }
+
+  useEffect(() => {
+    if (!open) return
+    function onMouse(e: MouseEvent) {
+      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) commit()
+    }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') commit() }
+    document.addEventListener('mousedown', onMouse)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onMouse); document.removeEventListener('keydown', onKey) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, pending])
+
+  function handleOpen(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    setPos({ top: rect.bottom + window.scrollY + 4, left: rect.left + window.scrollX })
+    setOpen(o => !o)
+  }
+
+  function toggle(uid: string) {
+    setPending(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid])
+  }
+
+  const assigned = members.filter(m => assigneeIds.includes(m.id))
+
+  return (
+    <div ref={triggerRef} className="inline-block cursor-pointer hover:opacity-75 transition-opacity" onClick={handleOpen} title="Kliknutím změnit">
+      {assigned.length > 0 ? (
+        <div className="flex -space-x-1.5 items-center">
+          {assigned.slice(0, 3).map(m => <Avatar key={m.id} name={m.name} initials={m.initials} color={m.color} small />)}
+          {assigned.length > 3 && <span className="text-xs text-gray-400 pl-2">+{assigned.length - 3}</span>}
+        </div>
+      ) : (
+        <span className="text-xs text-gray-400">–</span>
+      )}
+      {open && createPortal(
+        <div style={{ position: 'absolute', top: pos.top, left: pos.left, zIndex: 9999 }}
+          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden min-w-44 py-1"
+          onMouseDown={e => e.stopPropagation()}>
+          {members.map(m => (
+            <button key={m.id} onClick={e => { e.stopPropagation(); toggle(m.id) }}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 ${pending.includes(m.id) ? 'text-indigo-600 dark:text-indigo-400 font-medium' : 'text-gray-700 dark:text-gray-300'}`}>
+              <Avatar name={m.name} initials={m.initials} color={m.color} small />
+              <span className="flex-1 text-left">{m.name}</span>
+              {pending.includes(m.id) && <span className="text-xs text-indigo-500">✓</span>}
+            </button>
+          ))}
+          {pending.length > 0 && (
+            <>
+              <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+              <button onClick={e => { e.stopPropagation(); setPending([]) }}
+                className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10">
+                Zrušit přiřazení
+              </button>
+            </>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
 // ── Task Detail Modal ─────────────────────────────────────────
 
 function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSaved }: {
@@ -607,13 +687,15 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
 
 // ── Sortable Task Row ─────────────────────────────────────────
 
-function SortableTaskRow({ task, admin, canEdit, selected, anySelected, onToggleSelect, onOpen, onDragSelectStart, onDragSelectEnter, onStatusChange, onPriorityChange, onDueDateChange }: {
+function SortableTaskRow({ task, admin, canEdit, selected, anySelected, members, onToggleSelect, onOpen, onDragSelectStart, onDragSelectEnter, onAssigneesChange, onStatusChange, onPriorityChange, onDueDateChange }: {
   task: TaskWithRelations; admin: boolean; canEdit: boolean
   selected: boolean; anySelected: boolean
+  members: Profile[]
   onToggleSelect: (id: string, shiftKey?: boolean) => void
   onOpen: () => void
   onDragSelectStart: (id: string) => void
   onDragSelectEnter: (id: string) => void
+  onAssigneesChange: (taskId: string, ids: string[]) => void
   onStatusChange: (taskId: string, val: TaskStatus) => void
   onPriorityChange: (taskId: string, val: TaskPriority) => void
   onDueDateChange: (taskId: string, val: string | null) => void
@@ -657,16 +739,20 @@ function SortableTaskRow({ task, admin, canEdit, selected, anySelected, onToggle
         {task.description && <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{task.description}</p>}
       </td>
       <td className="px-3 py-2.5 hidden sm:table-cell">
-        {task.task_assignees && task.task_assignees.length > 0 ? (
+        {admin ? (
+          <InlineAssigneeSelect
+            assigneeIds={(task.task_assignees ?? []).map(a => a.user_id)}
+            members={members}
+            onChange={ids => onAssigneesChange(task.id, ids)}
+          />
+        ) : (task.task_assignees && task.task_assignees.length > 0 ? (
           <div className="flex -space-x-1.5 items-center">
             {task.task_assignees.slice(0, 3).map(a => a.profiles ? (
               <Avatar key={a.user_id} name={a.profiles.name} initials={a.profiles.initials} color={a.profiles.color} small />
             ) : null)}
-            {task.task_assignees.length > 3 && (
-              <span className="text-xs text-gray-400 pl-2">+{task.task_assignees.length - 3}</span>
-            )}
+            {task.task_assignees.length > 3 && <span className="text-xs text-gray-400 pl-2">+{task.task_assignees.length - 3}</span>}
           </div>
-        ) : <span className="text-xs text-gray-400">–</span>}
+        ) : <span className="text-xs text-gray-400">–</span>)}
       </td>
       <td className="px-3 py-2.5">
         {canEdit ? (
@@ -706,9 +792,10 @@ function SortableTaskRow({ task, admin, canEdit, selected, anySelected, onToggle
 
 // ── Task Group ────────────────────────────────────────────────
 
-function TaskGroup({ group, admin, profile, selectedTaskIds, onToggleSelect, onToggleGroup, onOpenTask, onCreateTask, onDragSelectStart, onDragSelectEnter, onStatusChange, onPriorityChange, onDueDateChange, onDragEnd }: {
+function TaskGroup({ group, admin, profile, members, selectedTaskIds, onToggleSelect, onToggleGroup, onOpenTask, onCreateTask, onDragSelectStart, onDragSelectEnter, onAssigneesChange, onStatusChange, onPriorityChange, onDueDateChange, onDragEnd }: {
   group: { id: string | null; name: string; tasks: TaskWithRelations[] }
   admin: boolean; profile: { id: string } | null
+  members: Profile[]
   selectedTaskIds: Set<string>
   onToggleSelect: (id: string, shiftKey?: boolean) => void
   onToggleGroup: (ids: string[]) => void
@@ -716,6 +803,7 @@ function TaskGroup({ group, admin, profile, selectedTaskIds, onToggleSelect, onT
   onCreateTask: (subprojectId: string) => void
   onDragSelectStart: (id: string) => void
   onDragSelectEnter: (id: string) => void
+  onAssigneesChange: (taskId: string, ids: string[]) => void
   onStatusChange: (taskId: string, val: TaskStatus) => void
   onPriorityChange: (taskId: string, val: TaskPriority) => void
   onDueDateChange: (taskId: string, val: string | null) => void
@@ -796,10 +884,12 @@ function TaskGroup({ group, admin, profile, selectedTaskIds, onToggleSelect, onT
                       canEdit={admin || task.assigned_to === profile?.id}
                       selected={selectedTaskIds.has(task.id)}
                       anySelected={anySelected}
+                      members={members}
                       onToggleSelect={onToggleSelect}
                       onOpen={() => onOpenTask(task)}
                       onDragSelectStart={onDragSelectStart}
                       onDragSelectEnter={onDragSelectEnter}
+                      onAssigneesChange={onAssigneesChange}
                       onStatusChange={onStatusChange}
                       onPriorityChange={onPriorityChange}
                       onDueDateChange={onDueDateChange}
@@ -1096,11 +1186,13 @@ export function ProjectPage() {
 
   useEffect(() => {
     if (!showAdminMenu) return
-    function handler(e: MouseEvent) {
+    function onMouse(e: MouseEvent) {
       if (adminMenuRef.current && !adminMenuRef.current.contains(e.target as Node)) setShowAdminMenu(false)
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setShowAdminMenu(false) }
+    document.addEventListener('mousedown', onMouse)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onMouse); document.removeEventListener('keydown', onKey) }
   }, [showAdminMenu])
 
   useEffect(() => {
@@ -1286,6 +1378,17 @@ export function ProjectPage() {
         const n = new Set(prev); n.delete(id); return n
       }
     })
+  }
+
+  async function handleAssigneesChange(taskId: string, assigneeIds: string[]) {
+    if (!profile) return
+    const assigned_to = assigneeIds[0] || null
+    await supabase.from('tasks').update({ assigned_to, updated_by: profile.id }).eq('id', taskId)
+    await supabase.from('task_assignees').delete().eq('task_id', taskId)
+    if (assigneeIds.length > 0) {
+      await supabase.from('task_assignees').insert(assigneeIds.map(uid => ({ task_id: taskId, user_id: uid })))
+    }
+    queryClient.invalidateQueries({ queryKey: ['tasks', projectId] })
   }
 
   async function handleBulkStatus(status: TaskStatus) {
@@ -1482,6 +1585,7 @@ export function ProjectPage() {
       {groups.map(group => (
         <TaskGroup key={group.id ?? '__none__'} group={group}
           admin={admin} profile={profile}
+          members={members}
           selectedTaskIds={selectedTaskIds}
           onToggleSelect={toggleTaskSelection}
           onToggleGroup={toggleGroupSelection}
@@ -1489,6 +1593,7 @@ export function ProjectPage() {
           onCreateTask={subId => { setCreateSubId(subId); setShowCreate(true) }}
           onDragSelectStart={handleDragSelectStart}
           onDragSelectEnter={handleDragSelectEnter}
+          onAssigneesChange={handleAssigneesChange}
           onStatusChange={handleStatusChange}
           onPriorityChange={handlePriorityChange}
           onDueDateChange={handleDueDateChange}

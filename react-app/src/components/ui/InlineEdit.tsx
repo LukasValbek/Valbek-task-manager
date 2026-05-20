@@ -17,8 +17,10 @@ export function InlineSelect<T extends string>({ value, options, onChange, rende
     function outside(e: MouseEvent) {
       if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) setOpen(false)
     }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setOpen(false) }
     document.addEventListener('mousedown', outside)
-    return () => document.removeEventListener('mousedown', outside)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', outside); document.removeEventListener('keydown', onKey) }
   }, [open])
 
   function handleOpen(e: React.MouseEvent) {
@@ -75,6 +77,7 @@ export function InlineDateInput({ value, onChange }: {
         onClick={e => e.stopPropagation()}
         onChange={e => { onChange(e.target.value || null); setEditing(false) }}
         onBlur={() => setEditing(false)}
+        onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); setEditing(false) } }}
         className="px-2 py-0.5 text-sm border border-indigo-400 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
       />
     )
