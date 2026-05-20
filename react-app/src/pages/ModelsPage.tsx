@@ -630,7 +630,7 @@ function Viewer({ url, name, modelId, onClose }: { url: string; name: string; mo
   const [wireframeOnly,  setWireframeOnly]  = useState(false)
   const [wireframeColor, setWireframeColor] = useState('#818cf8')
   const [wireframeMode,  setWireframeMode]  = useState<'wireframe' | 'edges'>('wireframe')
-  const [panelOpen,      setPanelOpen]      = useState(true)
+  const [panelOpen,      setPanelOpen]      = useState(() => window.innerWidth >= 768)
   const [nodes,          setNodes]          = useState<SceneNode[]>([])
   const [hiddenIds,      setHiddenIds]      = useState<Set<string>>(new Set())
   const [hoveredId,      setHoveredId]      = useState<string | null>(null)
@@ -875,29 +875,32 @@ function Viewer({ url, name, modelId, onClose }: { url: string; name: string; mo
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${annotationsVisible ? 'text-gray-400 hover:text-white hover:bg-gray-800' : 'bg-gray-700 text-gray-400'}`}
             >
               {annotationsVisible ? <Eye size={14} /> : <EyeOff size={14} />}
-              Poznámky
+              <span className="hidden sm:inline">Poznámky</span>
             </button>
           )}
           <button
             onClick={() => { setAnnotationMode(a => !a); setPendingPin(null) }}
-            title="Přidat poznámku"
+            title="Přidat poznámku (P)"
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${annotationMode ? 'bg-amber-600 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
           >
-            <MessageSquarePlus size={14} /> Poznámka <span style={{ opacity: 0.6, fontSize: 10 }}>(P)</span>
+            <MessageSquarePlus size={14} />
+            <span className="hidden sm:inline">Poznámka <span style={{ opacity: 0.6, fontSize: 10 }}>(P)</span></span>
           </button>
           <button
             onClick={() => setVegOpen(o => !o)}
             title="Vegetace"
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${vegOpen ? 'bg-green-700 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
           >
-            <Leaf size={14} /> Vegetace
+            <Leaf size={14} />
+            <span className="hidden sm:inline">Vegetace</span>
           </button>
           <button
             onClick={() => setPanelOpen(o => !o)}
             title="Scéna"
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${panelOpen ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
           >
-            <PanelRight size={14} /> Scéna
+            <PanelRight size={14} />
+            <span className="hidden sm:inline">Scéna</span>
           </button>
           <button onClick={onClose} className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
             <X size={18} />
@@ -971,7 +974,7 @@ function Viewer({ url, name, modelId, onClose }: { url: string; name: string; mo
 
           {/* Vegetation panel */}
           {vegOpen && (
-            <div className="absolute top-3 left-3 z-10 bg-gray-900/95 backdrop-blur border border-gray-700 rounded-xl shadow-2xl w-56 overflow-hidden">
+            <div className="absolute top-3 left-3 z-10 bg-gray-900/95 backdrop-blur border border-gray-700 rounded-xl shadow-2xl w-56 max-w-[calc(100vw-1.5rem)] overflow-hidden">
               <div className="px-3 py-2 border-b border-gray-800 flex items-center justify-between">
                 <span className="text-xs font-semibold text-gray-300 flex items-center gap-1.5"><Leaf size={12} /> Vegetace</span>
                 <div className="flex items-center gap-2">
@@ -1092,7 +1095,7 @@ function Viewer({ url, name, modelId, onClose }: { url: string; name: string; mo
           {/* Pending annotation input */}
           {pendingPin && (
             <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/30">
-              <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 shadow-2xl w-72">
+              <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 shadow-2xl w-72 max-w-[calc(100vw-2rem)]">
                 <p className="text-xs text-gray-400 mb-2 font-medium">Nová poznámka</p>
                 <textarea
                   autoFocus
@@ -1140,7 +1143,7 @@ function Viewer({ url, name, modelId, onClose }: { url: string; name: string; mo
 
         {/* Scene panel */}
         {panelOpen && (
-          <div className="w-56 bg-gray-900 border-l border-gray-800 flex flex-col shrink-0">
+          <div className="w-56 max-w-[75vw] bg-gray-900 border-l border-gray-800 flex flex-col shrink-0">
             {/* Panel header */}
             <div className="px-3 py-2.5 border-b border-gray-800 flex items-center justify-between">
               <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">

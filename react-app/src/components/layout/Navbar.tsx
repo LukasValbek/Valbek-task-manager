@@ -278,7 +278,7 @@ export function Navbar({ onCreateProject, onCreateUser, onManageTemplates }: Nav
           </button>
 
           {notifOpen && (
-            <div className="absolute bottom-full left-0 mb-1 w-80 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden z-50">
+            <div className="absolute bottom-full left-0 mb-1 w-80 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden z-50">
               <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
                 <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">Upozornění</span>
                 {unreadCount > 0 && (
