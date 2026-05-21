@@ -348,41 +348,48 @@ function CameraNearFarSync() {
 // ── Double-click to set orbit focus ──────────────────────────
 
 function FocusTarget({ disabled }: { disabled: boolean }) {
-  const { camera, controls, raycaster, scene, gl } = useThree()
-  const animating  = useRef(false)
-  const progress   = useRef(0)
-  const fromTarget = useRef(new THREE.Vector3())
-  const toTarget   = useRef(new THREE.Vector3())
+  const { camera, controls, gl, scene } = useThree()
+  const disabledRef = useRef(disabled)
+  const controlsRef = useRef<any>(null)
+  const animating   = useRef(false)
+  const progress    = useRef(0)
+  const fromTarget  = useRef(new THREE.Vector3())
+  const toTarget    = useRef(new THREE.Vector3())
+
+  // Keep refs in sync without re-registering the listener
+  useEffect(() => { disabledRef.current = disabled }, [disabled])
+  useEffect(() => { controlsRef.current = controls }, [controls])
 
   useEffect(() => {
     const canvas = gl.domElement
+    const rc = new THREE.Raycaster()
+
     function onDblClick(e: MouseEvent) {
-      if (disabled) return
+      if (disabledRef.current || !controlsRef.current) return
       const rect = canvas.getBoundingClientRect()
       const x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1
       const y = -((e.clientY - rect.top)  / rect.height) * 2 + 1
-      raycaster.setFromCamera(new THREE.Vector2(x, y), camera)
+      rc.setFromCamera(new THREE.Vector2(x, y), camera)
       const meshes: THREE.Object3D[] = []
       scene.traverse(o => { if ((o as THREE.Mesh).isMesh) meshes.push(o) })
-      const hits = raycaster.intersectObjects(meshes, false)
+      const hits = rc.intersectObjects(meshes, false)
       if (hits.length === 0) return
-      const ctrl = controls as any
-      fromTarget.current.copy(ctrl.target)
+      fromTarget.current.copy(controlsRef.current.target)
       toTarget.current.copy(hits[0].point)
       progress.current = 0
       animating.current = true
     }
+
     canvas.addEventListener('dblclick', onDblClick)
     return () => canvas.removeEventListener('dblclick', onDblClick)
-  }, [disabled, camera, controls, raycaster, scene, gl])
+  }, [camera, gl, scene]) // stable deps only — disabled/controls via refs
 
   useFrame(() => {
-    if (!animating.current || !controls) return
+    if (!animating.current || !controlsRef.current) return
     progress.current = Math.min(progress.current + 0.07, 1)
     const t = 1 - Math.pow(1 - progress.current, 3)
-    const ctrl = controls as any
-    ctrl.target.lerpVectors(fromTarget.current, toTarget.current, t)
-    ctrl.update()
+    controlsRef.current.target.lerpVectors(fromTarget.current, toTarget.current, t)
+    controlsRef.current.update()
     if (progress.current >= 1) animating.current = false
   })
 
