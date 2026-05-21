@@ -10,6 +10,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { snapCenterToCursor } from '@dnd-kit/modifiers'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { PageLayout } from '@/components/layout/PageLayout'
@@ -1649,7 +1650,7 @@ export function ProjectPage() {
             onDueDateChange={handleDueDateChange}
           />
         ))}
-        <DragOverlay>
+        <DragOverlay modifiers={[snapCenterToCursor]}>
           {activeDragId && (() => {
             const t = tasks.find(x => x.id === activeDragId)
             return t ? (
