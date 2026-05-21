@@ -10,9 +10,42 @@ import { useAuthStore, applyUserBg } from '@/stores/authStore'
 import { supabase } from '@/lib/supabase'
 import { Avatar } from '@/components/ui/Avatar'
 import { ProfileModal } from '@/components/layout/ProfileModal'
-import { ColorPicker } from '@/components/ui/ColorPicker'
 import { formatDateTime } from '@/lib/utils'
 import type { Notification } from '@/lib/types'
+
+const LIGHT_THEMES = [
+  { key: '#f9fafb', label: 'Klasická',   desc: 'Neutrální šedá' },
+  { key: '#fdf6ed', label: 'Teplá',      desc: 'Krémová' },
+  { key: '#eef2ff', label: 'Chladná',    desc: 'Jemná indigová' },
+] as const
+
+const DARK_THEMES = [
+  { key: '#030712', label: 'Noční',      desc: 'Hluboká černá' },
+  { key: '#0d1526', label: 'Navy',       desc: 'Námořní modrá' },
+  { key: '#1c1c1e', label: 'Grafitová',  desc: 'Teplá tmavá' },
+] as const
+
+function ThemeSwatch({ bg, label, desc, selected, onClick }: {
+  bg: string; label: string; desc: string; selected: boolean; onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`relative flex flex-col items-center gap-1.5 p-1 rounded-xl transition-all ${selected ? 'ring-2 ring-indigo-500 ring-offset-2 dark:ring-offset-gray-900' : 'hover:scale-105'}`}
+    >
+      <div className="w-16 h-10 rounded-lg border border-black/10 shadow-sm" style={{ backgroundColor: bg }} />
+      <span className="text-xs font-medium text-gray-700 dark:text-gray-300 leading-none">{label}</span>
+      <span className="text-[10px] text-gray-400 leading-none">{desc}</span>
+      {selected && (
+        <div className="absolute top-1.5 right-1.5 w-3.5 h-3.5 rounded-full bg-indigo-500 flex items-center justify-center">
+          <svg viewBox="0 0 10 10" className="w-2 h-2 text-white" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <polyline points="1.5,5 4,7.5 8.5,2.5" />
+          </svg>
+        </div>
+      )}
+    </button>
+  )
+}
 
 function UserColorSettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { profile, setProfile } = useAuthStore()
@@ -27,12 +60,12 @@ function UserColorSettingsModal({ open, onClose }: { open: boolean; onClose: () 
     }
   }, [open, profile?.bg_light, profile?.bg_dark])
 
-  function handleLightChange(hex: string) {
+  function pickLight(hex: string) {
     setLightColor(hex)
     document.documentElement.style.setProperty('--user-bg-light', hex)
   }
 
-  function handleDarkChange(hex: string) {
+  function pickDark(hex: string) {
     setDarkColor(hex)
     document.documentElement.style.setProperty('--user-bg-dark', hex)
   }
@@ -49,19 +82,6 @@ function UserColorSettingsModal({ open, onClose }: { open: boolean; onClose: () 
     onClose()
   }
 
-  async function handleReset() {
-    if (!profile) return
-    setSaving(true)
-    await supabase.from('profiles').update({ bg_light: null, bg_dark: null }).eq('id', profile.id)
-    const updated = { ...profile, bg_light: null, bg_dark: null }
-    setProfile(updated)
-    applyUserBg(updated)
-    setLightColor('#f9fafb')
-    setDarkColor('#030712')
-    setSaving(false)
-    onClose()
-  }
-
   function handleClose() {
     applyUserBg(profile)
     onClose()
@@ -72,36 +92,40 @@ function UserColorSettingsModal({ open, onClose }: { open: boolean; onClose: () 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={handleClose}>
       <div
-        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5"
+        className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-xs p-6 space-y-5"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Barvy pozadí</h2>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Motiv pozadí</h2>
           <button onClick={handleClose} className="p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800">
             <X size={16} />
           </button>
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-2">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Světlý režim</p>
-          <ColorPicker color={lightColor} onChange={handleLightChange} />
+          <div className="flex justify-between">
+            {LIGHT_THEMES.map(t => (
+              <ThemeSwatch key={t.key} bg={t.key} label={t.label} desc={t.desc}
+                selected={lightColor === t.key} onClick={() => pickLight(t.key)} />
+            ))}
+          </div>
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-2">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Tmavý režim</p>
-          <ColorPicker color={darkColor} onChange={handleDarkChange} />
+          <div className="flex justify-between">
+            {DARK_THEMES.map(t => (
+              <ThemeSwatch key={t.key} bg={t.key} label={t.label} desc={t.desc}
+                selected={darkColor === t.key} onClick={() => pickDark(t.key)} />
+            ))}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 pt-1">
-          <button onClick={handleReset} disabled={saving}
-            className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50">
-            Obnovit výchozí
-          </button>
-          <button onClick={handleSave} disabled={saving}
-            className="flex-1 px-3 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 font-medium">
-            {saving ? 'Ukládám…' : 'Uložit'}
-          </button>
-        </div>
+        <button onClick={handleSave} disabled={saving}
+          className="w-full px-3 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 font-medium">
+          {saving ? 'Ukládám…' : 'Uložit'}
+        </button>
       </div>
     </div>
   )
