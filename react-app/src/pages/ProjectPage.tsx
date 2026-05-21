@@ -604,6 +604,9 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
 
     setLoading(false)
     if (err) { setError(err.message); return }
+    if (newTask && assignedTo) {
+      await supabase.from('task_assignees').insert({ task_id: newTask.id, user_id: assignedTo })
+    }
     if (assignedTo && assignedTo !== profile.id) {
       await supabase.from('notifications').insert({
         user_id: assignedTo, type: 'task_assigned',
