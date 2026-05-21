@@ -328,6 +328,67 @@ function Loader() {
   )
 }
 
+// ── Dynamic near/far clipping ─────────────────────────────────
+
+function CameraNearFarSync() {
+  const { camera, controls } = useThree()
+  useFrame(() => {
+    if (!controls) return
+    const dist = camera.position.distanceTo((controls as any).target)
+    const cam  = camera as THREE.PerspectiveCamera
+    const near = Math.max(dist * 0.0005, 0.001)
+    const far  = Math.max(dist * 1000, 100)
+    if (Math.abs(cam.near - near) / near > 0.05) {
+      cam.near = near; cam.far = far; cam.updateProjectionMatrix()
+    }
+  })
+  return null
+}
+
+// ── Double-click to set orbit focus ──────────────────────────
+
+function FocusTarget({ disabled }: { disabled: boolean }) {
+  const { camera, controls, raycaster, scene, gl } = useThree()
+  const animating  = useRef(false)
+  const progress   = useRef(0)
+  const fromTarget = useRef(new THREE.Vector3())
+  const toTarget   = useRef(new THREE.Vector3())
+
+  useEffect(() => {
+    const canvas = gl.domElement
+    function onDblClick(e: MouseEvent) {
+      if (disabled) return
+      const rect = canvas.getBoundingClientRect()
+      const x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1
+      const y = -((e.clientY - rect.top)  / rect.height) * 2 + 1
+      raycaster.setFromCamera(new THREE.Vector2(x, y), camera)
+      const meshes: THREE.Object3D[] = []
+      scene.traverse(o => { if ((o as THREE.Mesh).isMesh) meshes.push(o) })
+      const hits = raycaster.intersectObjects(meshes, false)
+      if (hits.length === 0) return
+      const ctrl = controls as any
+      fromTarget.current.copy(ctrl.target)
+      toTarget.current.copy(hits[0].point)
+      progress.current = 0
+      animating.current = true
+    }
+    canvas.addEventListener('dblclick', onDblClick)
+    return () => canvas.removeEventListener('dblclick', onDblClick)
+  }, [disabled, camera, controls, raycaster, scene, gl])
+
+  useFrame(() => {
+    if (!animating.current || !controls) return
+    progress.current = Math.min(progress.current + 0.07, 1)
+    const t = 1 - Math.pow(1 - progress.current, 3)
+    const ctrl = controls as any
+    ctrl.target.lerpVectors(fromTarget.current, toTarget.current, t)
+    ctrl.update()
+    if (progress.current >= 1) animating.current = false
+  })
+
+  return null
+}
+
 // ── Camera rig (preset views) ─────────────────────────────────
 
 function CameraRig({ commandRef, boundsRef }: {
@@ -953,10 +1014,12 @@ function Viewer({ url, name, modelId, onClose }: { url: string; name: string; mo
             />
             <VegetationLayer groups={vegGroups} />
             <CameraRig commandRef={cameraCommandRef} boundsRef={boundsRef} />
+            <CameraNearFarSync />
+            <FocusTarget disabled={annotationMode || (vegOpen && vegPlaceMode === 'click' && vegType !== 'grass')} />
             <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
               <GizmoViewcube />
             </GizmoHelper>
-            <OrbitControls makeDefault />
+            <OrbitControls makeDefault zoomToCursor enableDamping dampingFactor={0.07} />
           </Canvas>
 
           {/* View preset buttons */}
