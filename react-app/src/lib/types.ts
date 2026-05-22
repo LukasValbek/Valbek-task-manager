@@ -54,6 +54,7 @@ export interface Task {
   priority: TaskPriority
   due_date: string | null
   file_path: string | null
+  annotation_id: string | null
   sort_order: number
   created_at: string
   updated_at: string
@@ -69,6 +70,7 @@ export interface TaskWithRelations extends Task {
   project?: Pick<Project, 'id' | 'name'>
   subproject?: Pick<Subproject, 'id' | 'name'> | null
   task_assignees?: { user_id: string; profiles: Pick<Profile, 'id' | 'name' | 'initials' | 'color'> | null }[]
+  annotation?: { id: string; text: string; object_name: string | null; x: number; y: number; z: number; model_id: string; model: { id: string; name: string } | null } | null
 }
 
 export interface Comment {

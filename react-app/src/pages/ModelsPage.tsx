@@ -1,6 +1,7 @@
 import { useState, useRef, Suspense, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, useGLTF, Environment, Html, useProgress, GizmoHelper, GizmoViewcube } from '@react-three/drei'
 import * as THREE from 'three'
@@ -695,6 +696,35 @@ function MeasureTool({ active }: { active: boolean }) {
   )
 }
 
+// ── Fly to annotation on load ────────────────────────────────
+
+function FlyToAnnotation({ pos, boundsRef }: {
+  pos: THREE.Vector3 | null
+  boundsRef: { current: THREE.Box3 | null }
+}) {
+  const { camera, controls } = useThree()
+  const controlsRef = useRef<any>(null)
+  const firedRef    = useRef(false)
+
+  useEffect(() => { controlsRef.current = controls }, [controls])
+  useEffect(() => { firedRef.current = false }, [pos])
+
+  useFrame(() => {
+    if (firedRef.current || !pos || !boundsRef.current || !controlsRef.current) return
+    const size = boundsRef.current.getSize(new THREE.Vector3())
+    const dist = Math.max(size.x, size.y, size.z) * 0.2
+    camera.position.set(pos.x + dist, pos.y + dist * 0.6, pos.z + dist)
+    camera.lookAt(pos)
+    ;(camera as THREE.PerspectiveCamera).near = Math.max(dist / 1000, 0.001)
+    ;(camera as THREE.PerspectiveCamera).updateProjectionMatrix()
+    controlsRef.current.target.copy(pos)
+    controlsRef.current.update()
+    firedRef.current = true
+  })
+
+  return null
+}
+
 // ── Camera rig (preset views) ─────────────────────────────────
 
 function CameraRig({ commandRef, boundsRef }: {
@@ -988,7 +1018,7 @@ const VIEW_PRESETS = [
   { id: 'left',   label: 'Levo' },
 ] as const
 
-function Viewer({ url, name, modelId, onClose }: { url: string; name: string; modelId: string; onClose: () => void }) {
+function Viewer({ url, name, modelId, onClose, focusAnnotationPos }: { url: string; name: string; modelId: string; onClose: () => void; focusAnnotationPos?: THREE.Vector3 | null }) {
   const { profile, isAdmin } = useAuthStore()
   const admin = isAdmin()
   const confirm = useConfirm()
@@ -1346,6 +1376,7 @@ function Viewer({ url, name, modelId, onClose }: { url: string; name: string; mo
             <FocusTarget disabled={flyMode || annotationMode || (vegOpen && vegPlaceMode === 'click' && vegType !== 'grass')} />
             <FlyCamera speedRef={flySpeedRef} onFlyChange={setFlyMode} />
             <MeasureTool active={measureMode} />
+            <FlyToAnnotation pos={focusAnnotationPos ?? null} boundsRef={boundsRef} />
             <ScreenshotCapture takeFnRef={takeFnRef} annotations={annotations} annotationsVisible={annotationsVisible} hiddenAnnotationIds={hiddenAnnotationIds} />
             <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
               <GizmoViewcube />
@@ -1676,8 +1707,10 @@ export function ModelsPage() {
   const admin = isAdmin()
   const qc = useQueryClient()
   const confirm = useConfirm()
+  const [searchParams] = useSearchParams()
 
   const [viewerModel, setViewerModel] = useState<{ model: ModelFile; url: string } | null>(null)
+  const [focusAnnotationPos, setFocusAnnotationPos] = useState<THREE.Vector3 | null>(null)
   const [uploadOpen, setUploadOpen]   = useState(false)
   const [uploading, setUploading]     = useState(false)
   const [uploadName, setUploadName]   = useState('')
@@ -1701,6 +1734,22 @@ export function ModelsPage() {
     const { data } = supabase.storage.from(BUCKET).getPublicUrl(model.file_path)
     setViewerModel({ model, url: data.publicUrl })
   }
+
+  // Deep-link: ?model=<id>&annotation=<id>
+  useEffect(() => {
+    const modelParam      = searchParams.get('model')
+    const annotationParam = searchParams.get('annotation')
+    if (!modelParam || models.length === 0) return
+    const found = models.find(m => m.id === modelParam)
+    if (found && !viewerModel) openViewer(found)
+    if (annotationParam) {
+      supabase.from('model_annotations').select('x, y, z').eq('id', annotationParam).single()
+        .then(({ data }) => {
+          if (data) setFocusAnnotationPos(new THREE.Vector3(data.x, data.y, data.z))
+        })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [models])
 
   function handleFileSelect(f: File) {
     setUploadFile(f)
@@ -1912,7 +1961,8 @@ export function ModelsPage() {
           url={viewerModel.url}
           name={viewerModel.model.name}
           modelId={viewerModel.model.id}
-          onClose={() => setViewerModel(null)}
+          onClose={() => { setViewerModel(null); setFocusAnnotationPos(null) }}
+          focusAnnotationPos={focusAnnotationPos}
         />
       )}
     </PageLayout>

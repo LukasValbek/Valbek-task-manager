@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, Copy, ChevronDown, ChevronUp, ChevronRight, MessageSquare, Send, Trash2, GripVertical, Settings, Paperclip, X, MoreHorizontal, CheckCircle } from 'lucide-react'
+import { Plus, Copy, ChevronDown, ChevronUp, ChevronRight, MessageSquare, Send, Trash2, GripVertical, Settings, Paperclip, X, MoreHorizontal, CheckCircle, MapPin, ExternalLink } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay, useDroppable,
   type DragEndEvent, type DragStartEvent,
@@ -477,6 +477,28 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
           </div>
         </div>
 
+        {/* 3D Annotation link */}
+        {task.annotation && (
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-indigo-200/60 dark:border-indigo-700/40 bg-indigo-50/50 dark:bg-indigo-900/15">
+            <MapPin size={15} className="text-indigo-500 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] text-indigo-500 font-medium leading-none mb-0.5">
+                {task.annotation.model?.name ?? 'Model'}
+                {task.annotation.object_name && <span className="ml-1.5 text-indigo-400/80">· {task.annotation.object_name}</span>}
+              </p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 truncate">{task.annotation.text}</p>
+            </div>
+            <Link
+              to={`/models?model=${task.annotation.model_id}&annotation=${task.annotation.id}`}
+              onClick={onClose}
+              className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium transition-colors"
+            >
+              <ExternalLink size={12} />
+              Otevřít v 3D
+            </Link>
+          </div>
+        )}
+
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
         {canEdit && (
@@ -619,6 +641,9 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
   const [dueDate,     setDueDate]     = useState('')
   const [subprojectId,setSubprojectId]= useState(defaultSubprojectId ?? '')
   const [filePath,    setFilePath]    = useState('')
+  const [annotationId, setAnnotationId] = useState<string | null>(null)
+  const [annModelId,   setAnnModelId]   = useState('')
+  const [annPickerOpen, setAnnPickerOpen] = useState(false)
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState('')
 
@@ -631,11 +656,33 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
     enabled: open,
   })
 
+  const { data: pickerModels = [] } = useQuery({
+    queryKey: ['picker_models'],
+    queryFn: async () => {
+      const { data } = await supabase.from('model_files').select('id, name').order('name')
+      return (data || []) as { id: string; name: string }[]
+    },
+    enabled: annPickerOpen,
+  })
+
+  const { data: pickerAnnotations = [] } = useQuery({
+    queryKey: ['picker_annotations', annModelId],
+    queryFn: async () => {
+      const { data } = await supabase.from('model_annotations').select('id, text, object_name').eq('model_id', annModelId).order('created_at')
+      return (data || []) as { id: string; text: string; object_name: string | null }[]
+    },
+    enabled: !!annModelId,
+  })
+
+  const selectedAnnotation = annotationId ? pickerAnnotations.find(a => a.id === annotationId) : null
+  const selectedModelName  = annModelId   ? pickerModels.find(m => m.id === annModelId)?.name ?? '' : ''
+
   useEffect(() => {
     if (open) {
       setTitle(''); setDesc(''); setStatus('neudělano'); setPriority('medium')
       setAssignedTo(profile?.id ?? ''); setDueDate('')
-      setSubprojectId(defaultSubprojectId ?? ''); setFilePath(''); setError('')
+      setSubprojectId(defaultSubprojectId ?? ''); setFilePath('')
+      setAnnotationId(null); setAnnModelId(''); setAnnPickerOpen(false); setError('')
     }
   }, [open, defaultSubprojectId, profile])
 
@@ -650,6 +697,7 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
       project_id: projectId, title: title.trim(), description: desc.trim() || null,
       status, priority, assigned_to: assignedTo || null, due_date: dueDate || null,
       subproject_id: subprojectId || null, file_path: filePath.trim() || null,
+      annotation_id: annotationId || null,
       created_by: profile.id, updated_by: profile.id, sort_order: maxOrder,
     }).select('id, title').single()
 
@@ -732,6 +780,51 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Cesta k souboru</label>
           <input type="text" value={filePath} onChange={e => setFilePath(e.target.value)} placeholder="\\server\share\projekt" className={inputClass} />
         </div>
+        {/* Annotation link */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Odkaz na 3D anotaci</label>
+            {annotationId && (
+              <button type="button" onClick={() => { setAnnotationId(null); setAnnModelId('') }}
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors">Zrušit</button>
+            )}
+          </div>
+          {annotationId && selectedAnnotation ? (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-900/20">
+              <MapPin size={13} className="text-indigo-500 shrink-0" />
+              <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium truncate">{selectedModelName}</span>
+              <span className="text-xs text-gray-500">·</span>
+              <span className="text-xs text-gray-700 dark:text-gray-300 truncate flex-1">{selectedAnnotation.text}</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <button type="button" onClick={() => setAnnPickerOpen(v => !v)}
+                className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${annPickerOpen ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' : 'border-dashed border-gray-300 dark:border-gray-600 text-gray-400 hover:border-indigo-400 hover:text-indigo-500'}`}>
+                <MapPin size={13} />
+                {annPickerOpen ? 'Skrýt výběr' : 'Přidat odkaz na anotaci v modelu…'}
+              </button>
+              {annPickerOpen && (
+                <div className="space-y-2 pl-1">
+                  <select value={annModelId} onChange={e => { setAnnModelId(e.target.value); setAnnotationId(null) }} className={inputClass}>
+                    <option value="">— vyberte model —</option>
+                    {pickerModels.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                  {annModelId && (
+                    <select value={annotationId ?? ''} onChange={e => setAnnotationId(e.target.value || null)} className={inputClass}>
+                      <option value="">— vyberte anotaci —</option>
+                      {pickerAnnotations.map(a => (
+                        <option key={a.id} value={a.id}>
+                          {a.object_name ? `[${a.object_name}] ` : ''}{a.text.slice(0, 80)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
         <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
           <Button type="button" variant="secondary" onClick={onClose}>Zrušit</Button>
@@ -1288,7 +1381,7 @@ export function ProjectPage() {
     queryKey: ['tasks', projectId],
     queryFn: async () => {
       let q = supabase.from('tasks')
-        .select('*, comments(count), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name), task_assignees(user_id, profiles(id, name, initials, color))')
+        .select('*, comments(count), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name), task_assignees(user_id, profiles(id, name, initials, color)), annotation:annotation_id(id, text, object_name, x, y, z, model_id, model:model_id(id, name))')
         .eq('project_id', projectId!)
         .order('sort_order', { ascending: true })
       const { data } = await q
