@@ -499,10 +499,11 @@ function FlyCamera({ speedRef, onFlyChange }: {
 
 // ── Screenshot capture ────────────────────────────────────────
 
-function ScreenshotCapture({ takeFnRef, annotations, annotationsVisible }: {
+function ScreenshotCapture({ takeFnRef, annotations, annotationsVisible, hiddenAnnotationIds }: {
   takeFnRef: { current: (() => void) | null }
   annotations: ModelAnnotation[]
   annotationsVisible: boolean
+  hiddenAnnotationIds: Set<string>
 }) {
   const { gl, camera } = useThree()
 
@@ -517,24 +518,82 @@ function ScreenshotCapture({ takeFnRef, annotations, annotationsVisible }: {
 
       if (annotationsVisible && annotations.length > 0) {
         const r = src.width / src.clientWidth // device pixel ratio
-        annotations.forEach((ann, idx) => {
+
+        annotations.forEach(ann => {
+          if (hiddenAnnotationIds.has(ann.id)) return
           const pos = new THREE.Vector3(ann.x, ann.y, ann.z).project(camera)
           if (pos.z > 1) return // behind camera
+
           const sx = (pos.x *  0.5 + 0.5) * src.width
           const sy = (pos.y * -0.5 + 0.5) * src.height
-          const radius = 9 * r
+
+          // Dot
           ctx.beginPath()
-          ctx.arc(sx, sy, radius, 0, Math.PI * 2)
-          ctx.fillStyle = 'rgba(251,191,36,0.92)'
+          ctx.arc(sx, sy, 3.5 * r, 0, Math.PI * 2)
+          ctx.fillStyle = '#818cf8'
           ctx.fill()
-          ctx.strokeStyle = '#fff'
-          ctx.lineWidth = 1.5 * r
+
+          // Stem
+          const stemH = 16 * r
+          ctx.beginPath()
+          ctx.moveTo(sx, sy)
+          ctx.lineTo(sx, sy - stemH)
+          ctx.strokeStyle = 'rgba(129,140,248,0.8)'
+          ctx.lineWidth = r
           ctx.stroke()
-          ctx.font = `bold ${11 * r}px system-ui`
-          ctx.fillStyle = '#111'
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.fillText(String(idx + 1), sx, sy)
+
+          // Label box dimensions
+          const pad   = 8 * r
+          const fs    = 11 * r
+          const lh    = fs * 1.45
+          const boxW  = 200 * r
+          const maxTW = boxW - pad * 2
+
+          ctx.font = `${fs}px system-ui, sans-serif`
+          const words = ann.text.split(' ')
+          const lines: string[] = []
+          let cur = ''
+          for (const w of words) {
+            const test = cur ? cur + ' ' + w : w
+            if (ctx.measureText(test).width > maxTW && cur) { lines.push(cur); cur = w }
+            else cur = test
+          }
+          lines.push(cur)
+
+          const headerH = ann.object_name ? 18 * r : 0
+          const textH   = lines.length * lh + pad * 2
+          const boxH    = headerH + textH
+          const boxX    = sx - boxW / 2
+          const boxY    = sy - stemH - boxH
+          const rad     = 6 * r
+
+          // Box background
+          ctx.fillStyle   = 'rgba(10,12,20,0.95)'
+          ctx.strokeStyle = 'rgba(99,102,241,0.5)'
+          ctx.lineWidth   = r
+          ctx.beginPath()
+          ;(ctx as any).roundRect(boxX, boxY, boxW, boxH, rad)
+          ctx.fill(); ctx.stroke()
+
+          // Object name header
+          if (ann.object_name) {
+            ctx.fillStyle = 'rgba(99,102,241,0.25)'
+            ctx.beginPath()
+            ;(ctx as any).roundRect(boxX, boxY, boxW, headerH, [rad, rad, 0, 0])
+            ctx.fill()
+            ctx.font          = `${9 * r}px system-ui, sans-serif`
+            ctx.fillStyle     = '#a5b4fc'
+            ctx.textAlign     = 'center'
+            ctx.textBaseline  = 'middle'
+            ctx.fillText(ann.object_name.toUpperCase(), sx, boxY + headerH / 2)
+          }
+
+          // Main text
+          ctx.font         = `${fs}px system-ui, sans-serif`
+          ctx.fillStyle    = '#e5e7eb'
+          ctx.textAlign    = 'left'
+          ctx.textBaseline = 'top'
+          lines.forEach((l, i) => ctx.fillText(l, boxX + pad, boxY + headerH + pad + i * lh))
         })
       }
 
@@ -543,7 +602,7 @@ function ScreenshotCapture({ takeFnRef, annotations, annotationsVisible }: {
       a.download = `model-${Date.now()}.png`
       a.click()
     }
-  }, [gl, camera, annotations, annotationsVisible, takeFnRef])
+  }, [gl, camera, annotations, annotationsVisible, hiddenAnnotationIds, takeFnRef])
 
   return null
 }
@@ -597,29 +656,34 @@ function MeasureTool({ active }: { active: boolean }) {
     }
   }, [active, camera, gl, scene])
 
-  const lineObj = useMemo(() => {
-    if (pts.length < 2) return null
-    const geo = new THREE.BufferGeometry().setFromPoints([pts[0], pts[1]])
-    const mat = new THREE.LineBasicMaterial({ color: '#f97316', depthTest: false, depthWrite: false })
-    const obj = new THREE.Line(geo, mat)
-    obj.renderOrder = 999
-    return obj
-  }, [pts])
-
   if (!active || pts.length === 0) return null
 
-  const mid  = pts.length === 2 ? new THREE.Vector3().addVectors(pts[0], pts[1]).multiplyScalar(0.5) : null
   const dist = pts.length === 2 ? pts[0].distanceTo(pts[1]) : null
+  const mid  = dist !== null ? pts[0].clone().lerp(pts[1], 0.5) : null
+
+  // Cylinder orientation: align Y-axis to the direction vector
+  const cylinderQuat = useMemo(() => {
+    if (pts.length < 2) return new THREE.Quaternion()
+    const dir = pts[1].clone().sub(pts[0]).normalize()
+    return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
+  }, [pts])
+
+  const radius = dist !== null ? Math.max(dist * 0.006, 0.004) : 0.01
 
   return (
     <group>
       {pts.map((p, i) => (
         <mesh key={i} position={p} renderOrder={999}>
-          <sphereGeometry args={[0.05, 16, 16]} />
+          <sphereGeometry args={[radius * 1.6, 16, 16]} />
           <meshBasicMaterial color="#f97316" depthTest={false} />
         </mesh>
       ))}
-      {lineObj && <primitive object={lineObj} />}
+      {dist !== null && mid && (
+        <mesh position={mid} quaternion={cylinderQuat} renderOrder={999}>
+          <cylinderGeometry args={[radius, radius, dist, 6]} />
+          <meshBasicMaterial color="#f97316" depthTest={false} />
+        </mesh>
+      )}
       {mid && dist !== null && (
         <Html position={mid} center>
           <div className="bg-gray-900/90 text-orange-400 text-xs font-mono font-semibold px-2 py-1 rounded border border-orange-500/40 whitespace-nowrap pointer-events-none select-none shadow-lg">
@@ -1282,7 +1346,7 @@ function Viewer({ url, name, modelId, onClose }: { url: string; name: string; mo
             <FocusTarget disabled={flyMode || annotationMode || (vegOpen && vegPlaceMode === 'click' && vegType !== 'grass')} />
             <FlyCamera speedRef={flySpeedRef} onFlyChange={setFlyMode} />
             <MeasureTool active={measureMode} />
-            <ScreenshotCapture takeFnRef={takeFnRef} annotations={annotations} annotationsVisible={annotationsVisible} />
+            <ScreenshotCapture takeFnRef={takeFnRef} annotations={annotations} annotationsVisible={annotationsVisible} hiddenAnnotationIds={hiddenAnnotationIds} />
             <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
               <GizmoViewcube />
             </GizmoHelper>
