@@ -656,12 +656,10 @@ function MeasureTool({ active }: { active: boolean }) {
     }
   }, [active, camera, gl, scene])
 
-  if (!active || pts.length === 0) return null
-
+  // All hooks before any early return
   const dist = pts.length === 2 ? pts[0].distanceTo(pts[1]) : null
   const mid  = dist !== null ? pts[0].clone().lerp(pts[1], 0.5) : null
 
-  // Cylinder orientation: align Y-axis to the direction vector
   const cylinderQuat = useMemo(() => {
     if (pts.length < 2) return new THREE.Quaternion()
     const dir = pts[1].clone().sub(pts[0]).normalize()
@@ -669,6 +667,8 @@ function MeasureTool({ active }: { active: boolean }) {
   }, [pts])
 
   const radius = dist !== null ? Math.max(dist * 0.006, 0.004) : 0.01
+
+  if (!active || pts.length === 0) return null
 
   return (
     <group>
