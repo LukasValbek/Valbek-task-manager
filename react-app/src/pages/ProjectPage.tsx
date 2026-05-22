@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, Copy, ChevronDown, ChevronUp, ChevronRight, MessageSquare, Send, Trash2, GripVertical, Settings, Paperclip, X, MoreHorizontal, CheckCircle, MapPin, ExternalLink } from 'lucide-react'
+import { Plus, Copy, ChevronDown, ChevronUp, ChevronRight, MessageSquare, Send, Trash2, GripVertical, Settings, Paperclip, X, MoreHorizontal, CheckCircle, MapPin, ExternalLink, FileText, Download, ImageIcon } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay, useDroppable,
   type DragEndEvent, type DragStartEvent,
@@ -26,11 +26,17 @@ import {
   STATUS_LABELS, PRIORITY_LABELS, copyToClipboard,
 } from '@/lib/utils'
 import type {
-  Project, Profile, Subproject, TaskWithRelations, Comment,
+  Project, Profile, Subproject, TaskWithRelations, Comment, TaskAttachment,
   TaskStatus, TaskPriority, TaskTemplate,
 } from '@/lib/types'
 
 const inputClass = "w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024)           return `${bytes} B`
+  if (bytes < 1024 * 1024)   return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 
 function isImageUrl(s: string) {
   return /^https?:\/\/\S+\.(jpe?g|png|gif|webp)(\?\S*)?$/i.test(s)
@@ -161,7 +167,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
   const [attachedImages, setAttachedImages] = useState<string[]>([])
   const [sending,        setSending]        = useState(false)
   const [error,       setError]       = useState('')
-  const [activeTab,   setActiveTab]   = useState<'comments' | 'history'>('comments')
+  const [activeTab,   setActiveTab]   = useState<'comments' | 'attachments' | 'history'>('comments')
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -212,6 +218,36 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
       setComment(''); setAttachedImages([])
     }
   }, [task])
+
+  const attachFileRef = useRef<HTMLInputElement>(null)
+
+  const { data: attachments = [], refetch: refetchAttachments } = useQuery<TaskAttachment[]>({
+    queryKey: ['task-attachments', task?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('task_attachments').select('*').eq('task_id', task!.id).order('created_at')
+      return (data || []) as TaskAttachment[]
+    },
+    enabled: !!task,
+  })
+
+  async function handleAddAttachment(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || [])
+    if (!files.length || !task || !profile) return
+    e.target.value = ''
+    for (const file of files) {
+      const path = `task-files/${task.id}/${Date.now()}_${file.name}`
+      const { error: upErr } = await supabase.storage.from('attachments').upload(path, file)
+      if (upErr) { toast.error(`Nepodařilo se nahrát ${file.name}`); continue }
+      await supabase.from('task_attachments').insert({ task_id: task.id, name: file.name, file_path: path, mime_type: file.type || null, file_size: file.size, created_by: profile.id })
+    }
+    refetchAttachments()
+  }
+
+  async function handleDeleteAttachment(id: string, filePath: string) {
+    await supabase.storage.from('attachments').remove([filePath])
+    await supabase.from('task_attachments').delete().eq('id', id)
+    refetchAttachments()
+  }
 
   const { data: comments = [], refetch: refetchComments } = useQuery<Comment[]>({
     queryKey: ['task-comments', task?.id],
@@ -515,10 +551,14 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
         {/* Tabs */}
         <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
           <div className="flex gap-4 mb-4 border-b border-gray-100 dark:border-gray-800">
-            {(['comments', 'history'] as const).map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`pb-2 text-sm font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}>
-                {tab === 'comments' ? `Komentáře (${comments.length})` : 'Historie'}
+            {([
+              { id: 'comments',    label: `Komentáře (${comments.length})` },
+              { id: 'attachments', label: attachments.length ? `Přílohy (${attachments.length})` : 'Přílohy' },
+              { id: 'history',     label: 'Historie' },
+            ] as const).map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                className={`pb-2 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id ? 'border-indigo-600 text-indigo-600 dark:border-indigo-400 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}>
+                {tab.label}
               </button>
             ))}
           </div>
@@ -579,6 +619,59 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
                 </div>
                 <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileAttach} />
               </div>
+            </div>
+          )}
+
+          {activeTab === 'attachments' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-400">{attachments.length === 0 ? 'Žádné přílohy.' : `${attachments.length} přílo${attachments.length === 1 ? 'ha' : attachments.length < 5 ? 'hy' : 'h'}`}</span>
+                {canEdit && (
+                  <button onClick={() => attachFileRef.current?.click()}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors">
+                    <Plus size={13} /> Přidat přílohu
+                  </button>
+                )}
+              </div>
+              {attachments.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {attachments.map(att => {
+                    const url = supabase.storage.from('attachments').getPublicUrl(att.file_path).data.publicUrl
+                    const isImg = /\.(jpe?g|png|gif|webp|svg)$/i.test(att.name) || att.mime_type?.startsWith('image/')
+                    return (
+                      <div key={att.id} className="group relative rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800 flex flex-col">
+                        {isImg ? (
+                          <div className="h-24 bg-gray-100 dark:bg-gray-700 overflow-hidden cursor-zoom-in"
+                            onClick={() => setLightboxSrc(url)}>
+                            <img src={url} alt={att.name} className="w-full h-full object-cover" />
+                          </div>
+                        ) : (
+                          <div className="h-24 flex items-center justify-center bg-gray-100 dark:bg-gray-800">
+                            <FileText size={32} className="text-gray-300 dark:text-gray-600" />
+                          </div>
+                        )}
+                        <div className="px-2 py-1.5 flex items-center gap-1.5 min-w-0">
+                          <span className="text-xs text-gray-700 dark:text-gray-300 truncate flex-1" title={att.name}>{att.name}</span>
+                          <a href={url} download={att.name} target="_blank" rel="noreferrer"
+                            className="shrink-0 p-1 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" title="Stáhnout">
+                            <Download size={12} />
+                          </a>
+                          {canEdit && (
+                            <button onClick={() => handleDeleteAttachment(att.id, att.file_path)}
+                              className="shrink-0 p-1 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors" title="Smazat">
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
+                        {att.file_size && (
+                          <span className="absolute top-1.5 right-1.5 text-[10px] bg-black/50 text-white rounded px-1 py-0.5 leading-none">{formatFileSize(att.file_size)}</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              <input ref={attachFileRef} type="file" multiple className="hidden" onChange={handleAddAttachment} />
             </div>
           )}
 
@@ -644,6 +737,8 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
   const [annotationId, setAnnotationId] = useState<string | null>(null)
   const [annModelId,   setAnnModelId]   = useState('')
   const [annPickerOpen, setAnnPickerOpen] = useState(false)
+  const [stagedFiles,  setStagedFiles]  = useState<File[]>([])
+  const stagedInputRef = useRef<HTMLInputElement>(null)
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState('')
 
@@ -682,7 +777,7 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
       setTitle(''); setDesc(''); setStatus('neudělano'); setPriority('medium')
       setAssignedTo(profile?.id ?? ''); setDueDate('')
       setSubprojectId(defaultSubprojectId ?? ''); setFilePath('')
-      setAnnotationId(null); setAnnModelId(''); setAnnPickerOpen(false); setError('')
+      setAnnotationId(null); setAnnModelId(''); setAnnPickerOpen(false); setStagedFiles([]); setError('')
     }
   }, [open, defaultSubprojectId, profile])
 
@@ -714,6 +809,13 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
           message: `Byl/a jsi přiřazen/a k úkolu: ${newTask.title}`,
           task_id: newTask.id, project_id: projectId,
         })
+      }
+      for (const file of stagedFiles) {
+        const path = `task-files/${newTask.id}/${Date.now()}_${file.name}`
+        const { error: upErr } = await supabase.storage.from('attachments').upload(path, file)
+        if (!upErr) {
+          await supabase.from('task_attachments').insert({ task_id: newTask.id, name: file.name, file_path: path, mime_type: file.type || null, file_size: file.size, created_by: profile.id })
+        }
       }
     }
     toast.success('Úkol vytvořen!')
@@ -823,6 +925,44 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
               )}
             </div>
           )}
+        </div>
+
+        {/* Staged file attachments */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Přílohy</label>
+            {stagedFiles.length > 0 && (
+              <span className="text-xs text-gray-400">{stagedFiles.length} soubor{stagedFiles.length === 1 ? '' : stagedFiles.length < 5 ? 'y' : 'ů'}</span>
+            )}
+          </div>
+          {stagedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {stagedFiles.map((f, i) => {
+                const isImg = f.type.startsWith('image/')
+                const previewUrl = isImg ? URL.createObjectURL(f) : null
+                return (
+                  <div key={i} className="relative group w-16 h-16 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden bg-gray-50 dark:bg-gray-800 flex items-center justify-center">
+                    {previewUrl
+                      ? <img src={previewUrl} alt={f.name} className="w-full h-full object-cover" />
+                      : <FileText size={22} className="text-gray-300 dark:text-gray-600" />
+                    }
+                    <button type="button"
+                      onClick={() => setStagedFiles(prev => prev.filter((_, j) => j !== i))}
+                      className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity text-white">
+                      <X size={14} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          <button type="button"
+            onClick={() => stagedInputRef.current?.click()}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 text-sm text-gray-400 hover:border-indigo-400 hover:text-indigo-500 transition-colors">
+            <Paperclip size={14} /> Přiložit soubory…
+          </button>
+          <input ref={stagedInputRef} type="file" multiple className="hidden"
+            onChange={e => { setStagedFiles(prev => [...prev, ...Array.from(e.target.files || [])]); e.target.value = '' }} />
         </div>
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

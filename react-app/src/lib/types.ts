@@ -73,6 +73,17 @@ export interface TaskWithRelations extends Task {
   annotation?: { id: string; text: string; object_name: string | null; x: number; y: number; z: number; model_id: string; model: { id: string; name: string } | null } | null
 }
 
+export interface TaskAttachment {
+  id: string
+  task_id: string
+  name: string
+  file_path: string
+  mime_type: string | null
+  file_size: number | null
+  created_by: string | null
+  created_at: string
+}
+
 export interface Comment {
   id: string
   task_id: string
