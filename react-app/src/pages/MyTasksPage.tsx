@@ -290,6 +290,28 @@ function TaskDetailModal({ task, onClose, onSaved }: {
 
 // ── My Tasks Page ─────────────────────────────────────────────
 
+type GroupBy = 'urgency' | 'project'
+
+const URGENCY_CONFIG: Record<string, { label: string; dot: string; text: string }> = {
+  overdue: { label: 'Po termínu', dot: 'bg-red-500',     text: 'text-red-600 dark:text-red-400' },
+  today:   { label: 'Dnes',       dot: 'bg-orange-500',  text: 'text-orange-600 dark:text-orange-400' },
+  week:    { label: 'Tento týden',dot: 'bg-indigo-500',  text: 'text-indigo-600 dark:text-indigo-400' },
+  later:   { label: 'Později',    dot: 'bg-gray-400',    text: 'text-gray-500 dark:text-gray-400' },
+  hotovo:  { label: 'Hotovo',     dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
+}
+
+function urgencyKey(t: TaskWithRelations): string {
+  if (t.status === 'hotovo') return 'hotovo'
+  if (!t.due_date) return 'later'
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const due   = new Date(t.due_date); due.setHours(0, 0, 0, 0)
+  const diff  = Math.floor((due.getTime() - today.getTime()) / 86_400_000)
+  if (diff < 0) return 'overdue'
+  if (diff === 0) return 'today'
+  if (diff <= 7)  return 'week'
+  return 'later'
+}
+
 export function MyTasksPage() {
   const { profile } = useAuthStore()
   const queryClient = useQueryClient()
@@ -298,6 +320,9 @@ export function MyTasksPage() {
   const [filterPriority, setFilterPriority] = useState('')
   const [search,         setSearch]         = useState('')
   const [selectedTask,   setSelectedTask]   = useState<TaskWithRelations | null>(null)
+  const [showDone,       setShowDone]       = useState(false)
+  const [groupBy,        setGroupBy]        = useState<GroupBy>('urgency')
+  const [collapsed,      setCollapsed]      = useState<Set<string>>(new Set())
 
   const { data: tasks = [], isLoading } = useQuery<TaskWithRelations[]>({
     queryKey: ['my-tasks', profile?.id],
@@ -345,8 +370,21 @@ export function MyTasksPage() {
     return () => { supabase.removeChannel(ch) }
   }, [invalidate])
 
+  const stats = useMemo(() => {
+    let overdue = 0, dueToday = 0, dueWeek = 0, done = 0
+    for (const t of tasks) {
+      const k = urgencyKey(t)
+      if (k === 'overdue') overdue++
+      else if (k === 'today') dueToday++
+      else if (k === 'week')  dueWeek++
+      else if (k === 'hotovo') done++
+    }
+    return { overdue, dueToday, dueWeek, done }
+  }, [tasks])
+
   const filtered = useMemo(() => {
     let result = tasks
+    if (!showDone)      result = result.filter(t => t.status !== 'hotovo')
     if (filterStatus)   result = result.filter(t => t.status === filterStatus)
     if (filterPriority) result = result.filter(t => t.priority === filterPriority)
     if (search) {
@@ -358,25 +396,85 @@ export function MyTasksPage() {
       )
     }
     return result
-  }, [tasks, filterStatus, filterPriority, search])
+  }, [tasks, showDone, filterStatus, filterPriority, search])
 
-  const byProject = useMemo(() => {
-    const groups: Record<string, { name: string; projectId: string; tasks: TaskWithRelations[] }> = {}
-    for (const t of filtered) {
-      const key = t.project_id
-      if (!groups[key]) groups[key] = { name: t.project?.name ?? '–', projectId: t.project_id, tasks: [] }
-      groups[key].tasks.push(t)
+  const groups = useMemo(() => {
+    if (groupBy === 'project') {
+      const map: Record<string, { id: string; label: string; projectId: string; tasks: TaskWithRelations[] }> = {}
+      for (const t of filtered) {
+        const key = t.project_id
+        if (!map[key]) map[key] = { id: key, label: t.project?.name ?? '–', projectId: t.project_id, tasks: [] }
+        map[key].tasks.push(t)
+      }
+      return Object.values(map)
     }
-    return Object.values(groups)
-  }, [filtered])
+    const order = ['overdue', 'today', 'week', 'later', 'hotovo']
+    const map: Record<string, TaskWithRelations[]> = {}
+    for (const t of filtered) {
+      const k = urgencyKey(t)
+      if (!map[k]) map[k] = []
+      map[k].push(t)
+    }
+    return order.filter(k => map[k]?.length).map(k => ({
+      id: k, label: URGENCY_CONFIG[k].label, projectId: '', tasks: map[k],
+    }))
+  }, [filtered, groupBy])
+
+  function toggleCollapse(id: string) {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   const inputClass = "px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
 
   return (
     <PageLayout>
-      <div className="flex items-center justify-between mb-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Moje úkoly</h1>
+        <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          {(['urgency', 'project'] as const).map(g => (
+            <button key={g} onClick={() => setGroupBy(g)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${groupBy === g ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}>
+              {g === 'urgency' ? 'Podle urgence' : 'Podle projektu'}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* Stats */}
+      {!isLoading && tasks.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {stats.overdue > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+              {stats.overdue} po termínu
+            </span>
+          )}
+          {stats.dueToday > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />
+              {stats.dueToday} dnes
+            </span>
+          )}
+          {stats.dueWeek > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block" />
+              {stats.dueWeek} tento týden
+            </span>
+          )}
+          {stats.done > 0 && (
+            <button onClick={() => setShowDone(v => !v)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${showDone ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 hover:text-emerald-700 dark:hover:text-emerald-400'}`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+              {stats.done} hotovo {showDone ? '(skrýt)' : '(zobrazit)'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
@@ -399,71 +497,107 @@ export function MyTasksPage() {
         <div className="flex items-center justify-center py-20">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : byProject.length === 0 ? (
+      ) : groups.length === 0 ? (
         <div className="text-center py-16 text-gray-400">
           {tasks.length === 0 ? 'Nemáte přiřazené žádné úkoly.' : 'Žádné úkoly odpovídající filtru.'}
         </div>
-      ) : byProject.map(group => (
-        <div key={group.projectId} className="mb-6">
-          <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-            <Link to={`/project/${group.projectId}`} className="hover:text-indigo-600 dark:hover:text-indigo-400">{group.name}</Link>
-          </h2>
+      ) : groups.map(group => {
+        const cfg = URGENCY_CONFIG[group.id]
+        const isCollapsed = collapsed.has(group.id)
+        return (
+          <div key={group.id} className="mb-5">
+            {/* Group header */}
+            <button
+              onClick={() => toggleCollapse(group.id)}
+              className="w-full flex items-center gap-2 mb-2 group text-left"
+            >
+              {cfg && <span className={`w-2 h-2 rounded-full ${cfg.dot} shrink-0`} />}
+              {groupBy === 'urgency' ? (
+                <span className={`text-sm font-semibold ${cfg?.text ?? 'text-gray-500 dark:text-gray-400'}`}>{group.label}</span>
+              ) : (
+                <Link to={`/project/${group.projectId}`} onClick={e => e.stopPropagation()}
+                  className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide hover:text-indigo-600 dark:hover:text-indigo-400">
+                  {group.label}
+                </Link>
+              )}
+              <span className="text-xs text-gray-400 dark:text-gray-600 font-normal">({group.tasks.length})</span>
+              <span className={`ml-auto text-gray-400 transition-transform duration-150 ${isCollapsed ? '' : 'rotate-90'}`}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                  <path d="M4.5 2.5l4 3.5-4 3.5V2.5z" />
+                </svg>
+              </span>
+            </button>
 
-          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-            <table className="w-full text-sm table-fixed">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-gray-800 text-xs text-gray-400 uppercase tracking-wide">
-                  <th className="text-left px-4 py-2.5 font-medium">Úkol</th>
-                  <th className="text-left px-4 py-2.5 font-medium w-36">Stav</th>
-                  <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell w-28">Priorita</th>
-                  <th className="text-left px-4 py-2.5 font-medium hidden md:table-cell w-32">Termín</th>
-                </tr>
-              </thead>
-              <tbody>
-                {group.tasks.map(t => {
-                  const overdue = isOverdue(t.due_date) && t.status !== 'hotovo'
-                  const commentCount = t.comments?.[0]?.count ?? 0
-                  return (
-                    <tr key={t.id} onClick={() => setSelectedTask(t)}
-                      className={`border-b border-gray-50 dark:border-gray-800 last:border-0 cursor-pointer
-                        ${t.status === 'hotovo' ? 'bg-emerald-50/60 hover:bg-emerald-50 dark:bg-emerald-900/10 dark:hover:bg-emerald-900/20' : overdue ? 'bg-red-50/30 hover:bg-gray-50 dark:bg-red-900/5 dark:hover:bg-gray-800/50' : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}>
-                      <td className="px-4 py-3">
-                        <div className="flex items-start gap-2">
-                          <span className={`font-medium ${t.status === 'hotovo' ? 'line-through decoration-emerald-700/10 dark:decoration-emerald-400/30 text-emerald-700/60 dark:text-emerald-400/60' : overdue ? 'text-red-700 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>{t.title}</span>
-                          {commentCount > 0 && (
-                            <span className="flex items-center gap-0.5 text-xs text-gray-400 shrink-0">
-                              <MessageSquare size={11} />{commentCount}
-                            </span>
-                          )}
-                        </div>
-                        {t.subproject && <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded mt-0.5 inline-block">{t.subproject.name}</span>}
-                        {t.description && <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{t.description}</p>}
-                      </td>
-                      <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                        <InlineSelect<TaskStatus>
-                          value={t.status} options={STATUS_LABELS}
-                          onChange={val => handleStatusChange(t.id, val)}
-                          renderBadge={() => <StatusBadge status={t.status} />}
-                        />
-                      </td>
-                      <td className="px-4 py-3 hidden sm:table-cell" onClick={e => e.stopPropagation()}>
-                        <InlineSelect<TaskPriority>
-                          value={t.priority} options={PRIORITY_LABELS}
-                          onChange={val => handlePriorityChange(t.id, val)}
-                          renderBadge={() => <PriorityBadge priority={t.priority} />}
-                        />
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell" onClick={e => e.stopPropagation()}>
-                        <InlineDateInput value={t.due_date} onChange={val => handleDueDateChange(t.id, val)} />
-                      </td>
+            {!isCollapsed && (
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+                <table className="w-full text-sm table-fixed">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-gray-800 text-xs text-gray-400 uppercase tracking-wide">
+                      <th className="text-left px-4 py-2.5 font-medium">Úkol</th>
+                      <th className="text-left px-4 py-2.5 font-medium w-36">Stav</th>
+                      <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell w-28">Priorita</th>
+                      <th className="text-left px-4 py-2.5 font-medium hidden md:table-cell w-32">Termín</th>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {group.tasks.map(t => {
+                      const overdue = isOverdue(t.due_date) && t.status !== 'hotovo'
+                      const commentCount = t.comments?.[0]?.count ?? 0
+                      return (
+                        <tr key={t.id} onClick={() => setSelectedTask(t)}
+                          className={`border-b border-gray-50 dark:border-gray-800 last:border-0 cursor-pointer
+                            ${t.status === 'hotovo' ? 'bg-emerald-50/60 hover:bg-emerald-50 dark:bg-emerald-900/10 dark:hover:bg-emerald-900/20'
+                              : overdue ? 'bg-red-50/30 hover:bg-gray-50 dark:bg-red-900/5 dark:hover:bg-gray-800/50'
+                              : 'hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}>
+                          <td className="px-4 py-3">
+                            <div className="flex items-start gap-2">
+                              <span className={`font-medium ${t.status === 'hotovo' ? 'line-through text-emerald-700/60 dark:text-emerald-400/60' : overdue ? 'text-red-700 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                                {t.title}
+                              </span>
+                              {commentCount > 0 && (
+                                <span className="flex items-center gap-0.5 text-xs text-gray-400 shrink-0">
+                                  <MessageSquare size={11} />{commentCount}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              {groupBy === 'urgency' && t.project && (
+                                <Link to={`/project/${t.project_id}`} onClick={e => e.stopPropagation()}
+                                  className="text-xs text-indigo-500 dark:text-indigo-400 hover:underline">
+                                  {t.project.name}
+                                </Link>
+                              )}
+                              {t.subproject && <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{t.subproject.name}</span>}
+                            </div>
+                            {t.description && <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{t.description}</p>}
+                          </td>
+                          <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                            <InlineSelect<TaskStatus>
+                              value={t.status} options={STATUS_LABELS}
+                              onChange={val => handleStatusChange(t.id, val)}
+                              renderBadge={() => <StatusBadge status={t.status} />}
+                            />
+                          </td>
+                          <td className="px-4 py-3 hidden sm:table-cell" onClick={e => e.stopPropagation()}>
+                            <InlineSelect<TaskPriority>
+                              value={t.priority} options={PRIORITY_LABELS}
+                              onChange={val => handlePriorityChange(t.id, val)}
+                              renderBadge={() => <PriorityBadge priority={t.priority} />}
+                            />
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell" onClick={e => e.stopPropagation()}>
+                            <InlineDateInput value={t.due_date} onChange={val => handleDueDateChange(t.id, val)} />
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        )
+      })}
 
       <TaskDetailModal
         task={selectedTask}
