@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, Copy, ChevronDown, ChevronUp, ChevronRight, MessageSquare, Send, Trash2, GripVertical, Settings, Paperclip, X, MoreHorizontal, CheckCircle, MapPin, ExternalLink, FileText, Download } from 'lucide-react'
+import { Plus, Copy, ChevronDown, ChevronUp, ChevronRight, MessageSquare, Send, Trash2, GripVertical, Settings, Paperclip, X, MoreHorizontal, CheckCircle, MapPin, ExternalLink, FileText, Download, BookTemplate } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay, useDroppable,
   type DragEndEvent, type DragStartEvent,
@@ -1842,7 +1842,7 @@ export function ProjectPage() {
 
   if (!project) {
     return (
-      <PageLayout onManageTemplates={admin ? () => setShowTemplatesModal(true) : undefined}>
+      <PageLayout>
         <div className="flex items-center justify-center py-20">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
         </div>
@@ -1916,6 +1916,10 @@ export function ProjectPage() {
                     <button onClick={() => { setShowManageSubprojects(true); setShowAdminMenu(false) }}
                       className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2.5">
                       <ChevronRight size={14} className="shrink-0" /> Podprojekty
+                    </button>
+                    <button onClick={() => { setShowTemplatesModal(true); setShowAdminMenu(false) }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2.5">
+                      <BookTemplate size={14} className="shrink-0" /> Šablony úkolů
                     </button>
                     <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
                     <button onClick={() => { handleToggleStatus(); setShowAdminMenu(false) }}

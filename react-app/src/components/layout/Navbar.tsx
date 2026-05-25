@@ -3,7 +3,7 @@ import logoUrl from '@/assets/logo.png'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, ListTodo, Box, ClipboardCheck, BarChart2,
-  Bell, Sun, Moon, Menu, X, LogOut, Plus, Users, BookTemplate, Palette, Boxes,
+  Bell, Sun, Moon, Menu, X, LogOut, Palette, Boxes,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuthStore, applyUserBg } from '@/stores/authStore'
@@ -129,13 +129,7 @@ function UserColorSettingsModal({ open, onClose }: { open: boolean; onClose: () 
   )
 }
 
-interface NavbarProps {
-  onCreateProject?: () => void
-  onCreateUser?: () => void
-  onManageTemplates?: () => void
-}
-
-export function Navbar({ onCreateProject, onCreateUser, onManageTemplates }: NavbarProps) {
+export function Navbar() {
   const location  = useLocation()
   const navigate  = useNavigate()
   const { profile, logout, isAdmin } = useAuthStore()
@@ -245,30 +239,6 @@ export function Navbar({ onCreateProject, onCreateUser, onManageTemplates }: Nav
         {admin && navItem('/review',  'Ke kontrole', ClipboardCheck, reviewCount)}
         {navItem('/reports',    'Reporty',        BarChart2)}
 
-        {/* Admin akce */}
-        {admin && (
-          <div className="pt-4 mt-2 border-t border-gray-100 dark:border-gray-800 space-y-0.5">
-            <p className="px-3 pb-1 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">Správa</p>
-            {onCreateProject && (
-              <button onClick={onCreateProject}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800 transition-colors">
-                <Plus size={17} className="shrink-0" /> Nový projekt
-              </button>
-            )}
-            {onCreateUser && (
-              <button onClick={onCreateUser}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800 transition-colors">
-                <Users size={17} className="shrink-0" /> Nový uživatel
-              </button>
-            )}
-            {onManageTemplates && (
-              <button onClick={onManageTemplates}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800 transition-colors">
-                <BookTemplate size={17} className="shrink-0" /> Šablony
-              </button>
-            )}
-          </div>
-        )}
       </nav>
 
       {/* Bottom */}

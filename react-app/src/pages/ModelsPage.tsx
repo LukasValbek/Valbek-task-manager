@@ -10,7 +10,8 @@ import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { PageLayout } from '@/components/layout/PageLayout'
-import { Upload, X, Box, Trash2, Grid3x3, Eye, EyeOff, Layers, PanelRight, MessageSquarePlus, Leaf, Camera, Ruler } from 'lucide-react'
+import { setBgModel } from '@/components/layout/BackgroundScene'
+import { Upload, X, Box, Trash2, Grid3x3, Eye, EyeOff, Layers, PanelRight, MessageSquarePlus, Leaf, Camera, Ruler, Monitor } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ModelFile, ModelAnnotation, ModelObjectColor } from '@/lib/types'
 
@@ -1711,6 +1712,7 @@ export function ModelsPage() {
 
   const [viewerModel, setViewerModel] = useState<{ model: ModelFile; url: string } | null>(null)
   const [focusAnnotationPos, setFocusAnnotationPos] = useState<THREE.Vector3 | null>(null)
+  const [bgModelId, setBgModelId]     = useState(() => localStorage.getItem('bg_model_id') ?? '')
   const [uploadOpen, setUploadOpen]   = useState(false)
   const [uploading, setUploading]     = useState(false)
   const [uploadName, setUploadName]   = useState('')
@@ -1875,14 +1877,23 @@ export function ModelsPage() {
                         {[formatSize(model.file_size), new Date(model.created_at).toLocaleDateString('cs-CZ')].filter(Boolean).join(' · ')}
                       </p>
                     </div>
-                    {admin && (
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
-                        onClick={e => { e.stopPropagation(); handleDelete(model) }}
-                        className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                        onClick={e => { e.stopPropagation(); setBgModel(model.id); setBgModelId(model.id); toast.success('Nastaveno jako pozadí') }}
+                        title="Nastavit jako pozadí aplikace"
+                        className={`p-1.5 rounded-md transition-all opacity-0 group-hover:opacity-100 ${bgModelId === model.id ? 'text-indigo-500 dark:text-indigo-400 opacity-100' : 'text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'}`}
                       >
-                        <Trash2 size={14} />
+                        <Monitor size={14} />
                       </button>
-                    )}
+                      {admin && (
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDelete(model) }}
+                          className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

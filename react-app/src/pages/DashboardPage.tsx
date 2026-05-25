@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
+import { Plus, CheckCircle2, AlertCircle, Clock, MoreHorizontal, BookTemplate } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/authStore'
 import { PageLayout } from '@/components/layout/PageLayout'
@@ -322,8 +322,21 @@ export function DashboardPage() {
   const [search,  setSearch]  = useState('')
   const [showCreate,    setShowCreate]    = useState(false)
   const [showTemplates, setShowTemplates] = useState(false)
+  const [showAdminMenu, setShowAdminMenu] = useState(false)
+  const adminMenuRef = useRef<HTMLDivElement>(null)
 
   const admin = isAdmin()
+
+  useEffect(() => {
+    if (!showAdminMenu) return
+    function onMouse(e: MouseEvent) {
+      if (adminMenuRef.current && !adminMenuRef.current.contains(e.target as Node)) setShowAdminMenu(false)
+    }
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setShowAdminMenu(false) }
+    document.addEventListener('mousedown', onMouse)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onMouse); document.removeEventListener('keydown', onKey) }
+  }, [showAdminMenu])
 
   useEffect(() => {
     if (searchParams.has('new')) {
@@ -401,17 +414,35 @@ export function DashboardPage() {
   ]
 
   return (
-    <PageLayout
-      onCreateProject={admin ? () => setShowCreate(true) : undefined}
-      onManageTemplates={admin ? () => setShowTemplates(true) : undefined}
-    >
+    <PageLayout>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Projekty</h1>
         {admin && (
-          <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>
-            <Plus size={16} />Nový projekt
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>
+              <Plus size={16} />Nový projekt
+            </Button>
+            <div className="relative" ref={adminMenuRef}>
+              <button
+                onClick={() => setShowAdminMenu(m => !m)}
+                className={`flex items-center justify-center w-8 h-8 rounded-md border text-sm transition-colors
+                  ${showAdminMenu
+                    ? 'border-gray-400 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200'
+                    : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:border-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}`}
+              >
+                <MoreHorizontal size={16} />
+              </button>
+              {showAdminMenu && (
+                <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-30 min-w-45 overflow-hidden py-1">
+                  <button onClick={() => { setShowTemplates(true); setShowAdminMenu(false) }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2.5">
+                    <BookTemplate size={14} className="text-gray-400" /> Šablony úkolů
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
