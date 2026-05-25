@@ -157,7 +157,7 @@ function VegetationLayerHolo({ groups }: { groups: VegGroup[] }) {
 }
 
 // ── Hologram model ────────────────────────────────────────────
-function HoloModel({ url, vegGroups }: { url: string; vegGroups: VegGroup[] }) {
+function HoloModel({ url, vegGroups, onReady }: { url: string; vegGroups: VegGroup[]; onReady?: () => void }) {
   const { scene: src } = useGLTF(url)
   const { camera } = useThree()
 
@@ -193,6 +193,7 @@ function HoloModel({ url, vegGroups }: { url: string; vegGroups: VegGroup[] }) {
       camera.far = dist * 10
       camera.updateProjectionMatrix()
     }
+    onReady?.()
   }, [scene, camera])
 
   return (
@@ -211,6 +212,7 @@ export function BackgroundScene() {
   const { user } = useAuthStore()
   const { pathname } = useLocation()
   const [bgModelId, setBgModelId] = useState(() => localStorage.getItem(BG_KEY) ?? '')
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
     function onBgChange(e: Event) { setBgModelId((e as CustomEvent<{ modelId: string }>).detail.modelId) }
@@ -235,6 +237,8 @@ export function BackgroundScene() {
 
   const resolvedId = modelRow?.id ?? ''
 
+  useEffect(() => { setReady(false) }, [resolvedId])
+
   const { data: vegGroups = [] } = useQuery({
     queryKey: ['bg-model-veg', resolvedId],
     queryFn: async () => {
@@ -252,7 +256,7 @@ export function BackgroundScene() {
   return (
     <div
       className="absolute inset-0 overflow-hidden pointer-events-none"
-      style={{ zIndex: 0, opacity: 0.2 }}
+      style={{ zIndex: 0, opacity: ready ? 0.2 : 0, transition: 'opacity 1s ease-in-out' }}
     >
       {/* Scanlines overlay */}
       <div className="absolute inset-0 pointer-events-none" style={{
@@ -269,7 +273,7 @@ export function BackgroundScene() {
         >
           <ambientLight intensity={0.3} />
           <Suspense fallback={null}>
-            <HoloModel url={modelUrl} vegGroups={vegGroups} />
+            <HoloModel url={modelUrl} vegGroups={vegGroups} onReady={() => setReady(true)} />
             <EffectComposer>
               <Bloom
                 intensity={1.8}
