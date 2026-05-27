@@ -155,10 +155,20 @@ function PostCard({ post, likes, commentCount, onLike, userId }: {
     queryFn: async () => {
       const { data } = await supabase
         .from('inspiration_comments')
-        .select('*, profiles(id, name, initials, color)')
+        .select('*')
         .eq('post_id', post.id)
         .order('created_at', { ascending: true })
-      return (data ?? []) as Comment[]
+      const rows = data ?? []
+      const authorIds = [...new Set(rows.map(c => c.created_by).filter(Boolean))]
+      const profileMap: Record<string, Profile> = {}
+      if (authorIds.length > 0) {
+        const { data: pd } = await supabase
+          .from('profiles')
+          .select('id, name, initials, color')
+          .in('id', authorIds)
+        pd?.forEach(p => { profileMap[p.id] = p })
+      }
+      return rows.map(c => ({ ...c, profiles: c.created_by ? (profileMap[c.created_by] ?? null) : null })) as Comment[]
     },
     enabled: showComments,
   })
@@ -295,11 +305,22 @@ export function InspiracePage() {
   const { data: posts = [], isLoading } = useQuery({
     queryKey: ['inspiration-posts'],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('inspiration_posts')
-        .select('*, profiles(id, name, initials, color)')
+        .select('*')
         .order('created_at', { ascending: false })
-      return (data ?? []) as Post[]
+      if (error) throw new Error(error.message)
+      const rows = data ?? []
+      const authorIds = [...new Set(rows.map(p => p.created_by).filter(Boolean))]
+      const profileMap: Record<string, Profile> = {}
+      if (authorIds.length > 0) {
+        const { data: pd } = await supabase
+          .from('profiles')
+          .select('id, name, initials, color')
+          .in('id', authorIds)
+        pd?.forEach(p => { profileMap[p.id] = p })
+      }
+      return rows.map(p => ({ ...p, profiles: p.created_by ? (profileMap[p.created_by] ?? null) : null })) as Post[]
     },
   })
 
