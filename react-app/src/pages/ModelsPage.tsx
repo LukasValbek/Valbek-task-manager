@@ -11,7 +11,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { setBgModel } from '@/components/layout/BackgroundScene'
-import { Upload, X, Box, Trash2, Grid3x3, Eye, EyeOff, Layers, PanelRight, MessageSquarePlus, Leaf, Camera, Ruler, Monitor } from 'lucide-react'
+import { Upload, X, Box, Trash2, Grid3x3, Eye, EyeOff, Layers, PanelRight, MessageSquarePlus, Leaf, Camera, Ruler, Monitor, FolderOpen } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ModelFile, ModelAnnotation, ModelObjectColor } from '@/lib/types'
 
@@ -1782,13 +1782,22 @@ export function ModelsPage() {
 
   const [viewerModel, setViewerModel] = useState<{ model: ModelFile; url: string } | null>(null)
   const [focusAnnotationPos, setFocusAnnotationPos] = useState<THREE.Vector3 | null>(null)
-  const [bgModelId, setBgModelId]     = useState(() => localStorage.getItem('bg_model_id') ?? '')
-  const [uploadOpen, setUploadOpen]   = useState(false)
-  const [uploading, setUploading]     = useState(false)
-  const [uploadName, setUploadName]   = useState('')
-  const [uploadDesc, setUploadDesc]   = useState('')
-  const [uploadFile, setUploadFile]   = useState<File | null>(null)
+  const [bgModelId, setBgModelId]         = useState(() => localStorage.getItem('bg_model_id') ?? '')
+  const [uploadOpen, setUploadOpen]       = useState(false)
+  const [uploading, setUploading]         = useState(false)
+  const [uploadName, setUploadName]       = useState('')
+  const [uploadDesc, setUploadDesc]       = useState('')
+  const [uploadFile, setUploadFile]       = useState<File | null>(null)
+  const [assigningModelId, setAssigningModelId] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects_list_for_models'],
+    queryFn: async () => {
+      const { data } = await supabase.from('projects').select('id, name').order('name')
+      return (data ?? []) as { id: string; name: string }[]
+    },
+  })
 
   const { data: models = [], isLoading } = useQuery({
     queryKey: ['model_files'],
@@ -1806,6 +1815,25 @@ export function ModelsPage() {
     const { data } = supabase.storage.from(BUCKET).getPublicUrl(model.file_path)
     setViewerModel({ model, url: data.publicUrl })
   }
+
+  async function handleAssignProject(modelId: string, projectId: string | null) {
+    await supabase.from('model_files').update({ project_id: projectId }).eq('id', modelId)
+    qc.invalidateQueries({ queryKey: ['model_files'] })
+    setAssigningModelId(null)
+  }
+
+  const modelGroups = useMemo(() => {
+    const groups: { projectId: string | null; name: string; models: ModelFile[] }[] = []
+    const projectsWithModels = projects.filter(p => models.some(m => m.project_id === p.id))
+    for (const p of projectsWithModels) {
+      groups.push({ projectId: p.id, name: p.name, models: models.filter(m => m.project_id === p.id) })
+    }
+    const unassigned = models.filter(m => !m.project_id)
+    if (unassigned.length > 0 || groups.length === 0) {
+      groups.push({ projectId: null, name: 'Bez projektu', models: unassigned })
+    }
+    return groups
+  }, [models, projects])
 
   // Deep-link: ?model=<id>&annotation=<id>
   useEffect(() => {
@@ -1918,53 +1946,76 @@ export function ModelsPage() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {models.map(model => (
-              <div
-                key={model.id}
-                onClick={() => openViewer(model)}
-                className="group bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-lg transition-all"
-              >
-                <div className="h-40 bg-linear-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 flex items-center justify-center overflow-hidden">
-                  {model.thumbnail_path ? (
-                    <img
-                      src={supabase.storage.from(BUCKET).getPublicUrl(model.thumbnail_path).data.publicUrl}
-                      alt={model.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <Box size={48} className="text-gray-300 dark:text-gray-700 group-hover:text-indigo-400 dark:group-hover:text-indigo-500 transition-colors" />
-                  )}
-                </div>
-                <div className="p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{model.name}</p>
-                      {model.description && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{model.description}</p>
-                      )}
-                      <p className="text-xs text-gray-400 dark:text-gray-600 mt-1.5">
-                        {[formatSize(model.file_size), new Date(model.created_at).toLocaleDateString('cs-CZ')].filter(Boolean).join(' · ')}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={e => { e.stopPropagation(); setBgModel(model.id); setBgModelId(model.id); toast.success('Nastaveno jako pozadí') }}
-                        title="Nastavit jako pozadí aplikace"
-                        className={`p-1.5 rounded-md transition-all opacity-0 group-hover:opacity-100 ${bgModelId === model.id ? 'text-indigo-500 dark:text-indigo-400 opacity-100' : 'text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'}`}
-                      >
-                        <Monitor size={14} />
-                      </button>
-                      {admin && (
-                        <button
-                          onClick={e => { e.stopPropagation(); handleDelete(model) }}
-                          className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
+          <div className="space-y-8">
+            {modelGroups.map(group => (
+              <div key={group.projectId ?? '__none__'}>
+                {modelGroups.length > 1 && (
+                  <div className="flex items-center gap-2 mb-3">
+                    <FolderOpen size={15} className="text-indigo-400 shrink-0" />
+                    <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{group.name}</h2>
+                    <span className="text-xs text-gray-400">({group.models.length})</span>
                   </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {group.models.map(model => (
+                    <div
+                      key={model.id}
+                      onClick={() => { if (assigningModelId !== model.id) openViewer(model) }}
+                      className="group bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-lg transition-all"
+                    >
+                      <div className="h-40 bg-linear-to-br from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-900 flex items-center justify-center overflow-hidden">
+                        {model.thumbnail_path ? (
+                          <img src={supabase.storage.from(BUCKET).getPublicUrl(model.thumbnail_path).data.publicUrl} alt={model.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Box size={48} className="text-gray-300 dark:text-gray-700 group-hover:text-indigo-400 dark:group-hover:text-indigo-500 transition-colors" />
+                        )}
+                      </div>
+                      <div className="p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{model.name}</p>
+                            {model.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{model.description}</p>}
+                            <p className="text-xs text-gray-400 dark:text-gray-600 mt-1.5">
+                              {[formatSize(model.file_size), new Date(model.created_at).toLocaleDateString('cs-CZ')].filter(Boolean).join(' · ')}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button onClick={e => { e.stopPropagation(); setBgModel(model.id); setBgModelId(model.id); toast.success('Nastaveno jako pozadí') }}
+                              title="Nastavit jako pozadí aplikace"
+                              className={`p-1.5 rounded-md transition-all opacity-0 group-hover:opacity-100 ${bgModelId === model.id ? 'text-indigo-500 dark:text-indigo-400 opacity-100' : 'text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'}`}>
+                              <Monitor size={14} />
+                            </button>
+                            {admin && (
+                              <button onClick={e => { e.stopPropagation(); setAssigningModelId(assigningModelId === model.id ? null : model.id) }}
+                                title="Přiřadit k projektu"
+                                className={`p-1.5 rounded-md transition-all opacity-0 group-hover:opacity-100 ${model.project_id ? 'text-indigo-500 dark:text-indigo-400 opacity-100' : 'text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'}`}>
+                                <FolderOpen size={14} />
+                              </button>
+                            )}
+                            {admin && (
+                              <button onClick={e => { e.stopPropagation(); handleDelete(model) }}
+                                className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all">
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {assigningModelId === model.id && (
+                          <div className="mt-2" onClick={e => e.stopPropagation()}>
+                            <select
+                              defaultValue={model.project_id ?? ''}
+                              onChange={e => handleAssignProject(model.id, e.target.value || null)}
+                              autoFocus
+                              className="w-full px-2 py-1.5 text-xs rounded-md border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            >
+                              <option value="">— bez projektu —</option>
+                              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}

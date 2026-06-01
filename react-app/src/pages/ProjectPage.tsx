@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, Copy, ChevronDown, ChevronUp, ChevronRight, MessageSquare, Send, Trash2, GripVertical, Settings, Paperclip, X, MoreHorizontal, CheckCircle, MapPin, ExternalLink, FileText, Download, BookTemplate } from 'lucide-react'
+import { Plus, Copy, ChevronDown, ChevronUp, ChevronRight, MessageSquare, Send, Trash2, GripVertical, Settings, Paperclip, X, MoreHorizontal, CheckCircle, MapPin, ExternalLink, FileText, Download, BookTemplate, Box } from 'lucide-react'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragOverlay, useDroppable,
   type DragEndEvent, type DragStartEvent,
@@ -1546,6 +1546,7 @@ export function ProjectPage() {
   const [showBulkCreate,    setShowBulkCreate]    = useState(false)
   const [showAdminMenu,     setShowAdminMenu]     = useState(false)
   const [activeDragId,      setActiveDragId]      = useState<string | null>(null)
+  const [showModels,        setShowModels]        = useState(false)
   const lastSelectedId    = useRef<string | null>(null)
   const adminMenuRef      = useRef<HTMLDivElement>(null)
   const isDragSelectActive = useRef(false)
@@ -1658,6 +1659,15 @@ export function ProjectPage() {
   }, [subprojects, filteredTasks])
 
   const allTasksInOrder = useMemo(() => groups.flatMap(g => g.tasks), [groups])
+
+  const { data: projectModels = [] } = useQuery({
+    queryKey: ['project_models', projectId],
+    queryFn: async () => {
+      const { data } = await supabase.from('model_files').select('id, name, thumbnail_path, file_path').eq('project_id', projectId!)
+      return (data ?? []) as { id: string; name: string; thumbnail_path: string | null; file_path: string }[]
+    },
+    enabled: !!projectId && showModels,
+  })
 
   // ── Inline status/priority update ─────────────────────────
 
@@ -2159,6 +2169,51 @@ export function ProjectPage() {
         tasks={tasks}
         onCreated={() => queryClient.invalidateQueries({ queryKey: ['tasks', projectId] })}
       />
+
+      {/* 3D Modely sekce */}
+      <div className="mt-6 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+        <button
+          onClick={() => setShowModels(v => !v)}
+          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+        >
+          <Box size={15} className="text-indigo-400 shrink-0" />
+          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">3D Modely</span>
+          {projectModels.length > 0 && <span className="text-xs text-gray-400">({projectModels.length})</span>}
+          <ChevronDown size={14} className={`ml-auto text-gray-400 transition-transform ${showModels ? 'rotate-180' : ''}`} />
+        </button>
+        {showModels && (
+          <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-800 pt-3">
+            {projectModels.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <Box size={32} className="mx-auto mb-2 opacity-25" />
+                <p className="text-sm">Žádné 3D modely přiřazené k tomuto projektu.</p>
+                <Link to="/models" className="mt-2 inline-block text-xs text-indigo-500 hover:underline">Přejít na 3D Modely →</Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {projectModels.map(model => {
+                  const thumbUrl = model.thumbnail_path
+                    ? supabase.storage.from('models').getPublicUrl(model.thumbnail_path).data.publicUrl
+                    : null
+                  return (
+                    <Link key={model.id} to={`/models?model=${model.id}`}
+                      className="group rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-md transition-all">
+                      <div className="h-28 bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
+                        {thumbUrl
+                          ? <img src={thumbUrl} alt={model.name} className="w-full h-full object-cover" />
+                          : <Box size={32} className="text-gray-300 dark:text-gray-600 group-hover:text-indigo-400 transition-colors" />}
+                      </div>
+                      <div className="px-2 py-1.5">
+                        <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{model.name}</p>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {showEditProject && project && (
         <EditProjectModal

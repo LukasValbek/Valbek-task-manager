@@ -144,6 +144,7 @@ export interface ModelFile {
   file_path: string
   thumbnail_path: string | null
   file_size: number | null
+  project_id: string | null
   created_at: string
   created_by: string | null
 }
