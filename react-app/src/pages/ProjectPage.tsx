@@ -1644,12 +1644,13 @@ export function ProjectPage() {
   }, [tasks, filterUser, filterStatus, filterPriority, filterSubproject, search])
 
   const groups = useMemo(() => {
+    const byTitle = (a: TaskWithRelations, b: TaskWithRelations) => a.title.localeCompare(b.title, 'cs')
     const result: { id: string | null; name: string; tasks: TaskWithRelations[] }[] = subprojects.map(sp => ({
       id: sp.id,
       name: sp.name,
-      tasks: filteredTasks.filter(t => t.subproject_id === sp.id),
+      tasks: filteredTasks.filter(t => t.subproject_id === sp.id).sort(byTitle),
     }))
-    const orphans = filteredTasks.filter(t => !t.subproject_id)
+    const orphans = filteredTasks.filter(t => !t.subproject_id).sort(byTitle)
     if (orphans.length > 0 || subprojects.length === 0) {
       result.push({ id: null, name: 'Bez podprojektu', tasks: orphans })
     }

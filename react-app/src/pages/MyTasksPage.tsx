@@ -435,7 +435,7 @@ export function MyTasksPage() {
         .from('tasks')
         .select('*, comments(count), project:project_id(id, name), subproject:subproject_id(id, name), assigned:assigned_to(id, name, initials, color), creator:created_by(id, name), updater:updated_by(id, name), task_assignees(user_id, profiles(id, name, initials, color)), annotation:annotation_id(id, text, object_name, model_id, model:model_id(id, name))')
         .in('id', taskIds)
-        .order('due_date', { ascending: true, nullsFirst: false })
+        .order('title', { ascending: true })
       return (data || []) as TaskWithRelations[]
     },
     enabled: !!profile,

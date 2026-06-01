@@ -26,7 +26,7 @@ async function fetchReviewTasks(): Promise<TaskWithRelations[]> {
       subproject:subprojects!tasks_subproject_id_fkey(id, name)
     `)
     .eq('status', 'připraveno ke kontrole')
-    .order('due_date', { ascending: true, nullsFirst: false })
+    .order('title', { ascending: true })
 
   if (error) throw error
   return (data ?? []) as unknown as TaskWithRelations[]
