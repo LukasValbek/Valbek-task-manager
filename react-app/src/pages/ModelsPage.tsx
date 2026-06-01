@@ -1195,11 +1195,11 @@ function Viewer({ url, name, modelId, onClose, focusAnnotationPos }: { url: stri
     if (canvas) {
       canvas.toBlob(async (blob) => {
         if (!blob) return
-        const path = `thumbnails/${modelId}.jpg`
+        const path = `thumbs/${modelId}.jpg`
         const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
         if (!error) {
           await supabase.from('model_files').update({ thumbnail_path: path }).eq('id', modelId)
-          queryClient.invalidateQueries({ queryKey: ['models'] })
+          queryClient.invalidateQueries({ queryKey: ['model_files'] })
         }
       }, 'image/jpeg', 0.88)
     }
