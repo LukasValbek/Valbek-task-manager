@@ -1817,9 +1817,11 @@ export function ModelsPage() {
   }
 
   async function handleAssignProject(modelId: string, projectId: string | null) {
-    await supabase.from('model_files').update({ project_id: projectId }).eq('id', modelId)
+    const { error } = await supabase.from('model_files').update({ project_id: projectId }).eq('id', modelId)
+    if (error) { toast.error('Chyba: ' + error.message); return }
     qc.invalidateQueries({ queryKey: ['model_files'] })
     setAssigningModelId(null)
+    toast.success(projectId ? 'Model přiřazen k projektu' : 'Model odebrán z projektu')
   }
 
   const modelGroups = useMemo(() => {
