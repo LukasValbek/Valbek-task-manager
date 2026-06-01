@@ -17,15 +17,15 @@ type FilterType = 'aktivní' | 'dokončeno' | 'vše'
 
 interface ProjectWithStats extends Project {
   project_members: { user_id: string }[]
-  _stats?: { total: number; done: number; review: number; inprog: number; todo: number }
+  _stats?: { total: number; done: number; approved: number; review: number; inprog: number; todo: number }
   _members?: Profile[]
 }
 
 // ── Project Card ──────────────────────────────────────────────
 
 function ProjectCard({ project, members }: { project: ProjectWithStats; members: Profile[] }) {
-  const stats    = project._stats ?? { total: 0, done: 0, review: 0, inprog: 0, todo: 0 }
-  const pct      = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0
+  const stats    = project._stats ?? { total: 0, done: 0, approved: 0, review: 0, inprog: 0, todo: 0 }
+  const pct      = stats.total > 0 ? Math.round(((stats.done + stats.approved) / stats.total) * 100) : 0
   const overdue  = isOverdue(project.due_date) && project.status !== 'dokončeno'
   const dueSoon  = !overdue && isDueSoon(project.due_date) && project.status !== 'dokončeno'
   const isDone   = project.status === 'dokončeno'
@@ -71,10 +71,11 @@ function ProjectCard({ project, members }: { project: ProjectWithStats; members:
 
       {/* Stats dots */}
       <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-        <span className="flex items-center gap-1" title="Neudělano"><span className="w-2 h-2 rounded-full bg-gray-400 inline-block" />{stats.todo}</span>
-        <span className="flex items-center gap-1" title="Rozpracováno"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />{stats.inprog}</span>
-        <span className="flex items-center gap-1" title="Ke kontrole"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />{stats.review}</span>
-        <span className="flex items-center gap-1" title="Hotovo"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />{stats.done}</span>
+        {stats.todo > 0 && <span className="flex items-center gap-1" title="Neudělano"><span className="w-2 h-2 rounded-full bg-gray-400 inline-block" />{stats.todo}</span>}
+        {stats.inprog > 0 && <span className="flex items-center gap-1" title="Rozpracováno"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />{stats.inprog}</span>}
+        {stats.review > 0 && <span className="flex items-center gap-1" title="Ke kontrole"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />{stats.review}</span>}
+        {stats.approved > 0 && <span className="flex items-center gap-1" title="Schváleno"><span className="w-2 h-2 rounded-full bg-teal-500 inline-block" />{stats.approved}</span>}
+        {stats.done > 0 && <span className="flex items-center gap-1" title="Hotovo"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />{stats.done}</span>}
       </div>
 
       {/* Progress bar */}
@@ -369,11 +370,12 @@ export function DashboardPage() {
     queryFn: async () => {
       if (!projects.length) return {}
       const { data } = await supabase.from('tasks').select('project_id, status').in('project_id', projects.map(p => p.id))
-      const byProject: Record<string, { total: number; done: number; review: number; inprog: number; todo: number }> = {}
+      const byProject: Record<string, { total: number; done: number; approved: number; review: number; inprog: number; todo: number }> = {}
       for (const t of data || []) {
-        if (!byProject[t.project_id]) byProject[t.project_id] = { total: 0, done: 0, review: 0, inprog: 0, todo: 0 }
+        if (!byProject[t.project_id]) byProject[t.project_id] = { total: 0, done: 0, approved: 0, review: 0, inprog: 0, todo: 0 }
         byProject[t.project_id].total++
-        if (t.status === 'hotovo' || t.status === 'schváleno') byProject[t.project_id].done++
+        if (t.status === 'hotovo') byProject[t.project_id].done++
+        else if (t.status === 'schváleno') byProject[t.project_id].approved++
         else if (t.status === 'připraveno ke kontrole') byProject[t.project_id].review++
         else if (t.status === 'rozpracováno') byProject[t.project_id].inprog++
         else byProject[t.project_id].todo++
