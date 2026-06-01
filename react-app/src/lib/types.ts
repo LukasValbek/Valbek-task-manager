@@ -147,6 +147,7 @@ export interface ModelFile {
   thumbnail_path: string | null
   file_size: number | null
   project_id: string | null
+  camera_state: { px: number; py: number; pz: number; tx: number; ty: number; tz: number } | null
   created_at: string
   created_by: string | null
 }

@@ -611,10 +611,14 @@ function ScreenshotCapture({ takeFnRef, annotations, annotationsVisible, hiddenA
 
 // ── Camera persist (save / restore per model) ─────────────────
 
-function CameraPersist({ modelId, boundsRef, saveFnRef }: {
+type CameraState = { px: number; py: number; pz: number; tx: number; ty: number; tz: number }
+type CameraSaveResult = { canvas: HTMLCanvasElement; cameraState: CameraState }
+
+function CameraPersist({ modelId, boundsRef, saveFnRef, initialCameraState }: {
   modelId: string
   boundsRef: { current: THREE.Box3 | null }
-  saveFnRef: { current: (() => HTMLCanvasElement) | null }
+  saveFnRef: { current: (() => CameraSaveResult) | null }
+  initialCameraState: CameraState | null
 }) {
   const { camera, controls, gl } = useThree()
   const restoredRef = useRef(false)
@@ -622,31 +626,32 @@ function CameraPersist({ modelId, boundsRef, saveFnRef }: {
   useFrame(() => {
     if (restoredRef.current || !boundsRef.current || !controls) return
     restoredRef.current = true
-    const raw = localStorage.getItem(`model_cam_${modelId}`)
-    if (!raw) return
-    try {
-      const { px, py, pz, tx, ty, tz } = JSON.parse(raw)
-      camera.position.set(px, py, pz)
-      ;(controls as any).target.set(tx, ty, tz)
-      ;(controls as any).update()
-    } catch {}
+    // DB state takes priority (shared), localStorage as fallback
+    const state: CameraState | null = initialCameraState ?? (() => {
+      const raw = localStorage.getItem(`model_cam_${modelId}`)
+      if (!raw) return null
+      try { return JSON.parse(raw) as CameraState } catch { return null }
+    })()
+    if (!state) return
+    camera.position.set(state.px, state.py, state.pz)
+    ;(controls as any).target.set(state.tx, state.ty, state.tz)
+    ;(controls as any).update()
   })
 
   useEffect(() => {
     saveFnRef.current = () => {
       const ctrl = controls as any
-      if (ctrl?.target) {
-        localStorage.setItem(`model_cam_${modelId}`, JSON.stringify({
-          px: camera.position.x, py: camera.position.y, pz: camera.position.z,
-          tx: ctrl.target.x, ty: ctrl.target.y, tz: ctrl.target.z,
-        }))
+      const cameraState: CameraState = {
+        px: camera.position.x, py: camera.position.y, pz: camera.position.z,
+        tx: ctrl?.target?.x ?? 0, ty: ctrl?.target?.y ?? 0, tz: ctrl?.target?.z ?? 0,
       }
+      localStorage.setItem(`model_cam_${modelId}`, JSON.stringify(cameraState))
       const src = gl.domElement
       const W = 480, H = Math.round(W * src.height / src.width)
       const tmp = document.createElement('canvas')
       tmp.width = W; tmp.height = H
       tmp.getContext('2d')?.drawImage(src, 0, 0, W, H)
-      return tmp
+      return { canvas: tmp, cameraState }
     }
     return () => { saveFnRef.current = null }
   }, [camera, controls, gl, modelId, saveFnRef])
@@ -1064,7 +1069,7 @@ const VIEW_PRESETS = [
   { id: 'left',   label: 'Levo' },
 ] as const
 
-function Viewer({ url, name, modelId, onClose, focusAnnotationPos }: { url: string; name: string; modelId: string; onClose: () => void; focusAnnotationPos?: THREE.Vector3 | null }) {
+function Viewer({ url, name, modelId, onClose, focusAnnotationPos, initialCameraState }: { url: string; name: string; modelId: string; onClose: () => void; focusAnnotationPos?: THREE.Vector3 | null; initialCameraState?: CameraState | null }) {
   const { profile, isAdmin } = useAuthStore()
   const admin = isAdmin()
   const confirm = useConfirm()
@@ -1101,7 +1106,7 @@ function Viewer({ url, name, modelId, onClose, focusAnnotationPos }: { url: stri
   const [measureMode, setMeasureMode] = useState(false)
   const flySpeedRef = useRef(flySpeed)
   const takeFnRef      = useRef<(() => void) | null>(null)
-  const cameraSaveRef  = useRef<(() => HTMLCanvasElement) | null>(null)
+  const cameraSaveRef  = useRef<(() => CameraSaveResult) | null>(null)
   const meshMapRef     = useRef<Map<string, THREE.Mesh>>(new Map())
   const cameraCommandRef = useRef<((v: string) => void) | null>(null)
   const boundsRef        = useRef<THREE.Box3 | null>(null)
@@ -1190,17 +1195,20 @@ function Viewer({ url, name, modelId, onClose, focusAnnotationPos }: { url: stri
   }, [onClose, pendingPin, annotationMode])
 
   function handleClose() {
-    const canvas = cameraSaveRef.current?.()
+    const result = cameraSaveRef.current?.()
     onClose()
-    if (!canvas) return
+    if (!result) return
+    const { canvas, cameraState } = result
+    // Save camera state to DB (shared across users)
+    supabase.from('model_files').update({ camera_state: cameraState }).eq('id', modelId).then(() => {
+      queryClient.invalidateQueries({ queryKey: ['model_files'] })
+    })
     canvas.toBlob(async (blob) => {
       if (!blob) return
-      // Fixed path per model — upsert overwrites, no accumulation
       const path = `thumbs/cam_${modelId}.jpg`
       const { error } = await supabase.storage.from(BUCKET).upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
       if (error) return
       await supabase.from('model_files').update({ thumbnail_path: path }).eq('id', modelId)
-      // Cache-buster: store timestamp in localStorage so this browser sees fresh image
       localStorage.setItem(`thumb_v_${modelId}`, Date.now().toString())
       queryClient.invalidateQueries({ queryKey: ['model_files'] })
     }, 'image/jpeg', 0.88)
@@ -1443,7 +1451,7 @@ function Viewer({ url, name, modelId, onClose, focusAnnotationPos }: { url: stri
             <MeasureTool active={measureMode} />
             <FlyToAnnotation pos={focusAnnotationPos ?? null} boundsRef={boundsRef} />
             <ScreenshotCapture takeFnRef={takeFnRef} annotations={annotations} annotationsVisible={annotationsVisible} hiddenAnnotationIds={hiddenAnnotationIds} />
-            <CameraPersist modelId={modelId} boundsRef={boundsRef} saveFnRef={cameraSaveRef} />
+            <CameraPersist modelId={modelId} boundsRef={boundsRef} saveFnRef={cameraSaveRef} initialCameraState={initialCameraState ?? null} />
             <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
               <GizmoViewcube />
             </GizmoHelper>
@@ -2106,6 +2114,7 @@ export function ModelsPage() {
           modelId={viewerModel.model.id}
           onClose={() => { setViewerModel(null); setFocusAnnotationPos(null) }}
           focusAnnotationPos={focusAnnotationPos}
+          initialCameraState={viewerModel.model.camera_state ?? null}
         />
       )}
     </PageLayout>
