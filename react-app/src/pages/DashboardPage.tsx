@@ -9,7 +9,7 @@ import { PageLayout } from '@/components/layout/PageLayout'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { formatDate, isOverdue, isDueSoon } from '@/lib/utils'
+import { formatDate, isOverdue, isDueSoon, STATUS_WEIGHTS } from '@/lib/utils'
 import { ManageTaskTemplatesModal } from '@/components/ui/TaskTemplatesModal'
 import type { Profile, Project } from '@/lib/types'
 
@@ -25,7 +25,8 @@ interface ProjectWithStats extends Project {
 
 function ProjectCard({ project, members }: { project: ProjectWithStats; members: Profile[] }) {
   const stats    = project._stats ?? { total: 0, done: 0, approved: 0, review: 0, inprog: 0, todo: 0 }
-  const pct      = stats.total > 0 ? Math.round(((stats.done + stats.approved) / stats.total) * 100) : 0
+  const weightedSum = stats.todo * STATUS_WEIGHTS['neudělano'] + stats.inprog * STATUS_WEIGHTS['rozpracováno'] + stats.review * STATUS_WEIGHTS['připraveno ke kontrole'] + stats.approved * STATUS_WEIGHTS['schváleno'] + stats.done * STATUS_WEIGHTS['hotovo']
+  const pct      = stats.total > 0 ? Math.round(weightedSum / stats.total) : 0
   const overdue  = isOverdue(project.due_date) && project.status !== 'dokončeno'
   const dueSoon  = !overdue && isDueSoon(project.due_date) && project.status !== 'dokončeno'
   const isDone   = project.status === 'dokončeno'

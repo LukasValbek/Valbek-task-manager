@@ -23,7 +23,7 @@ import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { ManageTaskTemplatesModal } from '@/components/ui/TaskTemplatesModal'
 import {
   formatDate, formatDateTime, isOverdue,
-  STATUS_LABELS, PRIORITY_LABELS, copyToClipboard,
+  STATUS_LABELS, STATUS_WEIGHTS, PRIORITY_LABELS, copyToClipboard,
 } from '@/lib/utils'
 import type {
   Project, Profile, Subproject, TaskWithRelations, Comment, TaskAttachment,
@@ -1170,8 +1170,8 @@ function TaskGroup({ group, admin, profile, members, selectedTaskIds, activeDrag
 }) {
   const [collapsed, setCollapsed] = useState(false)
   const total = group.tasks.length
-  const done  = group.tasks.filter(t => t.status === 'hotovo' || t.status === 'schváleno').length
-  const pct   = total > 0 ? Math.round((done / total) * 100) : 0
+  const weightedSum = group.tasks.reduce((sum, t) => sum + (STATUS_WEIGHTS[t.status] ?? 10), 0)
+  const pct   = total > 0 ? Math.round(weightedSum / total) : 0
   const anySelected = selectedTaskIds.size > 0
   const allGroupSelected = total > 0 && group.tasks.every(t => selectedTaskIds.has(t.id))
   const someGroupSelected = !allGroupSelected && group.tasks.some(t => selectedTaskIds.has(t.id))

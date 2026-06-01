@@ -53,6 +53,14 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   'hotovo':                 'Hotovo',
 }
 
+export const STATUS_WEIGHTS: Record<TaskStatus, number> = {
+  'neudělano':              10,
+  'rozpracováno':           30,
+  'připraveno ke kontrole': 75,
+  'schváleno':              90,
+  'hotovo':                 100,
+}
+
 export const STATUS_COLORS: Record<TaskStatus, string> = {
   'neudělano':              'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
   'rozpracováno':           'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',

@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { Avatar } from '@/components/ui/Avatar'
 import { PriorityBadge } from '@/components/ui/Badge'
+import { STATUS_WEIGHTS } from '@/lib/utils'
 import type { Task, Project, Profile, Subproject } from '@/lib/types'
 
 // ── Types ─────────────────────────────────────────────────────
@@ -104,7 +105,8 @@ function ProjectCard({ project, tasks }: { project: ProjectWithMembers; tasks: T
   const total = tasks.length
   const done  = tasks.filter(t => (t.status === 'hotovo' || t.status === 'schváleno')).length
   const overdue = tasks.filter(isOverdue).length
-  const pct   = total === 0 ? 0 : Math.round((done / total) * 100)
+  const weightedSum = tasks.reduce((s, t) => s + (STATUS_WEIGHTS[t.status as keyof typeof STATUS_WEIGHTS] ?? 10), 0)
+  const pct   = total === 0 ? 0 : Math.round(weightedSum / total)
 
   return (
     <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
@@ -173,13 +175,15 @@ function PersonTable({ tasks, profiles }: { tasks: Task[]; profiles: Profile[] }
   const rows = useMemo(() => {
     return profiles.map(p => {
       const mine = tasks.filter(t => t.assigned_to === p.id)
+      const weightedSum = mine.reduce((s, t) => s + (STATUS_WEIGHTS[t.status as keyof typeof STATUS_WEIGHTS] ?? 10), 0)
       return {
         profile: p,
         total: mine.length,
         done: mine.filter(t => (t.status === 'hotovo' || t.status === 'schváleno')).length,
         inProgress: mine.filter(t => t.status === 'rozpracováno').length,
         overdue: mine.filter(isOverdue).length,
-        highPriority: mine.filter(t => t.priority === 'high' && t.status !== 'hotovo').length,
+        highPriority: mine.filter(t => t.priority === 'high' && t.status !== 'hotovo' && t.status !== 'schváleno').length,
+        pct: mine.length === 0 ? 0 : Math.round(weightedSum / mine.length),
       }
     }).filter(r => r.total > 0).sort((a, b) => b.total - a.total)
   }, [tasks, profiles])
@@ -202,7 +206,7 @@ function PersonTable({ tasks, profiles }: { tasks: Task[]; profiles: Profile[] }
         </thead>
         <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
           {rows.map(r => {
-            const pct = r.total === 0 ? 0 : Math.round((r.done / r.total) * 100)
+            const pct = r.pct
             return (
               <tr key={r.profile.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                 <td className="py-2.5 pr-4">
@@ -299,11 +303,11 @@ function PersonCategoryMatrix({ tasks, subprojects, profiles }: {
                 {categories.map(cat => {
                   const sameNameIds = subprojects.filter(s => s.name === cat).map(s => s.id)
                   const allCatTasks = tasks.filter(t => t.assigned_to === p.id && t.subproject_id && sameNameIds.includes(t.subproject_id))
-                  const done = allCatTasks.filter(t => (t.status === 'hotovo' || t.status === 'schváleno')).length
                   if (allCatTasks.length === 0) return (
                     <td key={cat} className="py-2.5 px-3 text-center text-gray-300 dark:text-gray-700 text-xs">—</td>
                   )
-                  const pct = Math.round((done / allCatTasks.length) * 100)
+                  const catWeightedSum = allCatTasks.reduce((s, t) => s + (STATUS_WEIGHTS[t.status as keyof typeof STATUS_WEIGHTS] ?? 10), 0)
+                  const pct = Math.round(catWeightedSum / allCatTasks.length)
                   return (
                     <td key={cat} className="py-2.5 px-3 text-center">
                       <div className="flex flex-col items-center gap-0.5">
@@ -376,7 +380,8 @@ export function ReportsPage() {
   const doneTasks   = allTasks.filter(t => (t.status === 'hotovo' || t.status === 'schváleno')).length
   const overdueTasks = allTasks.filter(isOverdue).length
   const activeProjects = projects.filter(p => p.status === 'aktivní').length
-  const donePct = totalTasks === 0 ? 0 : Math.round((doneTasks / totalTasks) * 100)
+  const allWeightedSum = allTasks.reduce((s, t) => s + (STATUS_WEIGHTS[t.status as keyof typeof STATUS_WEIGHTS] ?? 10), 0)
+  const donePct = totalTasks === 0 ? 0 : Math.round(allWeightedSum / totalTasks)
 
   const activeProjectsSorted = projects
     .filter(p => p.status === 'aktivní')
