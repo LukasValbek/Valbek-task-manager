@@ -39,7 +39,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setProfile: (profile) => set({ profile }),
   setLoading: (loading) => set({ loading }),
 
-  isAdmin: () => get().profile?.role === 'admin',
+  isAdmin: () => !!get().profile,
 
   loadProfile: async (userId: string) => {
     const { data } = await supabase
