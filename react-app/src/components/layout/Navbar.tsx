@@ -236,7 +236,7 @@ export function Navbar() {
         {navItem('/my-tasks',   'Moje úkoly',    ListTodo)}
         {navItem('/3dmax',      '3DMax',          Box)}
         {navItem('/models',     '3D Modely',      Boxes)}
-        {admin && navItem('/review',  'Ke kontrole', ClipboardCheck, reviewCount)}
+        {admin && !['nela', 'lenka'].includes(profile?.name?.toLowerCase() ?? '') && navItem('/review',  'Ke kontrole', ClipboardCheck, reviewCount)}
         {navItem('/reports',    'Reporty',        BarChart2)}
         {navItem('/inspiration', 'Inspirace',     Lightbulb)}
 
