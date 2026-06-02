@@ -297,7 +297,7 @@ function PersonCategoryMatrix({ tasks, subprojects, profiles }: {
                 <td className="py-2.5 pr-4 sticky left-0 bg-white dark:bg-gray-900 group-hover:bg-gray-50 z-10">
                   <div className="flex items-center gap-2">
                     <Avatar name={p.name} initials={p.initials ?? undefined} color={p.color ?? undefined} small />
-                    <span className="font-medium text-gray-800 dark:text-gray-200 truncate max-w-[80px]">{p.name}</span>
+                    <span className="font-medium text-gray-800 dark:text-gray-200 truncate max-w-20">{p.name}</span>
                   </div>
                 </td>
                 {categories.map(cat => {

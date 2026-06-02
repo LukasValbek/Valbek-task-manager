@@ -215,7 +215,7 @@ export function Navbar() {
       <Icon size={17} className="shrink-0" />
       {label}
       {!!badge && badge > 0 && (
-        <span className="ml-auto min-w-[20px] h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center px-1">
+        <span className="ml-auto min-w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center px-1">
           {badge}
         </span>
       )}
@@ -265,7 +265,7 @@ export function Navbar() {
             <Bell size={17} className="shrink-0" />
             Upozornění
             {unreadCount > 0 && (
-              <span className="ml-auto min-w-[20px] h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center px-1">
+              <span className="ml-auto min-w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center px-1">
                 {unreadCount}
               </span>
             )}

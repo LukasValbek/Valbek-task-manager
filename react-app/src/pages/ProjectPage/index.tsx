@@ -509,7 +509,7 @@ export function ProjectPage() {
                   <MoreHorizontal size={16} />
                 </button>
                 {showAdminMenu && (
-                  <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-30 min-w-[190px] overflow-hidden py-1">
+                  <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-30 min-w-47.5 overflow-hidden py-1">
                     <button onClick={() => { setShowEditProject(true); setShowAdminMenu(false) }}
                       className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-2.5">
                       <Settings size={14} className="shrink-0" /> Upravit projekt

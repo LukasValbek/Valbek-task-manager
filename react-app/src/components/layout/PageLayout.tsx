@@ -13,7 +13,7 @@ export function PageLayout({ children }: PageLayoutProps) {
     <div className="app-grid app-bg min-h-screen md:pl-56 pt-14 md:pt-0 relative">
       <BackgroundScene />
       <Navbar />
-      <main key={pathname} className="page-enter max-w-screen-xl mx-auto px-6 py-6 relative" style={{ zIndex: 1 }}>
+      <main key={pathname} className="page-enter max-w-7xl mx-auto px-6 py-6 relative" style={{ zIndex: 1 }}>
         {children}
       </main>
     </div>
