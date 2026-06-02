@@ -23,8 +23,11 @@ function TaskDetailModal({ task, onClose, onSaved }: {
   onSaved: () => void
 }) {
   const { profile, isAdmin } = useAuthStore()
-  const admin   = isAdmin()
-  const canEdit = admin || task?.assigned_to === profile?.id || task?.task_assignees?.some(a => a.user_id === profile?.id)
+  const admin           = isAdmin()
+  const isCreator       = task?.created_by === profile?.id
+  const isAssigned      = task?.assigned_to === profile?.id || task?.task_assignees?.some(a => a.user_id === profile?.id)
+  const canFullEdit     = admin || isCreator
+  const canChangeStatus = admin || isCreator || isAssigned
   const confirm = useConfirm()
 
   const [status,        setStatus]        = useState<TaskStatus>(task?.status ?? 'neudělano')
@@ -126,11 +129,11 @@ function TaskDetailModal({ task, onClose, onSaved }: {
   async function handleSave() {
     if (!task || !profile) return
     setSaving(true); setError('')
-    const { error: err } = await supabase.from('tasks').update({
+    const updateData = canFullEdit ? {
       status, priority, due_date: dueDate || null, description: desc || null,
-      model_id: annModelId || null,
-      annotation_id: annotationId || null, updated_by: profile.id,
-    }).eq('id', task.id)
+      model_id: annModelId || null, annotation_id: annotationId || null, updated_by: profile.id,
+    } : { status, updated_by: profile.id }
+    const { error: err } = await supabase.from('tasks').update(updateData).eq('id', task.id)
     setSaving(false)
     if (err) { setError(err.message); return }
     toast.success('Uloženo.')
@@ -174,7 +177,7 @@ function TaskDetailModal({ task, onClose, onSaved }: {
           {/* Popis */}
           <div className="sm:col-span-2">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Popis</label>
-            {canEdit ? (
+            {canFullEdit ? (
               <textarea rows={3} value={desc} onChange={e => setDesc(e.target.value)}
                 className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
             ) : (
@@ -185,7 +188,7 @@ function TaskDetailModal({ task, onClose, onSaved }: {
           {/* Stav */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Stav</label>
-            {canEdit ? (
+            {canChangeStatus ? (
               <select value={status} onChange={e => setStatus(e.target.value as TaskStatus)}
                 className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -196,7 +199,7 @@ function TaskDetailModal({ task, onClose, onSaved }: {
           {/* Priorita */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priorita</label>
-            {canEdit ? (
+            {canFullEdit ? (
               <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)}
                 className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 {Object.entries(PRIORITY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -209,7 +212,7 @@ function TaskDetailModal({ task, onClose, onSaved }: {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Termín {overdue && <span className="ml-1 text-xs text-red-500 font-normal">Po termínu</span>}
             </label>
-            {canEdit ? (
+            {canFullEdit ? (
               <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
                 className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             ) : (
@@ -225,7 +228,7 @@ function TaskDetailModal({ task, onClose, onSaved }: {
         </div>
 
         {/* 3D Model / Annotation link */}
-        {canEdit ? (
+        {canFullEdit ? (
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Odkaz na 3D model</label>
@@ -295,7 +298,7 @@ function TaskDetailModal({ task, onClose, onSaved }: {
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-        {canEdit && (
+        {(canChangeStatus || canFullEdit) && (
           <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
             <Button variant="primary" loading={saving} onClick={handleSave}>Uložit změny</Button>
           </div>

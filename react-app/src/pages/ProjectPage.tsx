@@ -149,9 +149,12 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
   onSaved: () => void
 }) {
   const { profile, isAdmin } = useAuthStore()
-  const admin   = isAdmin()
-  const canEdit = admin || task?.assigned_to === profile?.id || task?.task_assignees?.some(a => a.user_id === profile?.id)
-  const canDelete = admin || task?.created_by === profile?.id
+  const admin      = isAdmin()
+  const isCreator  = task?.created_by === profile?.id
+  const isAssigned = task?.assigned_to === profile?.id || task?.task_assignees?.some(a => a.user_id === profile?.id)
+  const canFullEdit     = admin || isCreator
+  const canChangeStatus = admin || isCreator || isAssigned
+  const canDelete       = admin || isCreator
   const confirm = useConfirm()
 
   const [title,          setTitle]          = useState('')
@@ -307,17 +310,20 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
   async function handleSave() {
     if (!task || !profile) return
     setSaving(true); setError('')
-    if (!title.trim()) { setError('Název úkolu nesmí být prázdný.'); setSaving(false); return }
-    const primaryAssignee = assignedToIds[0] || null
-    const updateData = {
-      title: title.trim(),
+    // Assigned-only users can only change status
+    const updateData = canFullEdit ? {
+      title: title.trim() || task.title,
       status, priority, due_date: dueDate || null, description: desc || null,
       subproject_id: subprojectId || null, file_path: filePath.trim() || null,
       model_id: annModelId || null,
       annotation_id: annotationId || null,
       updated_by: profile.id,
-      ...(admin ? { assigned_to: primaryAssignee } : {}),
+      ...(canFullEdit ? { assigned_to: assignedToIds[0] || null } : {}),
+    } : {
+      status,
+      updated_by: profile.id,
     }
+    if (canFullEdit && !title.trim()) { setError('Název úkolu nesmí být prázdný.'); setSaving(false); return }
     const { error: err } = await supabase.from('tasks').update(updateData).eq('id', task.id)
     if (err) { setError(err.message); setSaving(false); return }
 
@@ -342,7 +348,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
     if ((annotationId || null) !== (task.annotation_id || null))
       entries.push({ field: 'anotace', old_value: task.annotation?.text ?? null, new_value: annotationId ? (pickerAnnotations.find(a => a.id === annotationId)?.text ?? task.annotation?.text ?? null) : null })
 
-    if (admin) {
+    if (canFullEdit) {
       const prevIds = task.task_assignees?.map(a => a.user_id) ?? (task.assigned_to ? [task.assigned_to] : [])
       const addedIds = assignedToIds.filter(id => !prevIds.includes(id))
       const removedIds = prevIds.filter(id => !assignedToIds.includes(id))
@@ -436,7 +442,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
           {/* Název */}
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Název úkolu</label>
-            {canEdit
+            {canFullEdit
               ? <input type="text" value={title} onChange={e => setTitle(e.target.value)} className={inputClass} />
               : <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{task.title}</p>
             }
@@ -445,7 +451,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
           {/* Popis */}
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Popis</label>
-            {canEdit ? (
+            {canFullEdit ? (
               <textarea rows={3} value={desc} onChange={e => setDesc(e.target.value)} className={`${inputClass} resize-none`} />
             ) : (
               <p className="text-sm text-gray-700 dark:text-gray-300">{task.description || '–'}</p>
@@ -455,7 +461,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
           {/* Podprojekt */}
           <div>
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Podprojekt</label>
-            {canEdit ? (
+            {canFullEdit ? (
               <select value={subprojectId} onChange={e => setSubprojectId(e.target.value)} className={inputClass}>
                 <option value="">– bez podprojektu –</option>
                 {subprojects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -470,7 +476,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
           {/* Přiřazení */}
           <div className="sm:col-span-2">
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Přiřazení</label>
-            {admin ? (
+            {canFullEdit ? (
               <div className="flex flex-wrap gap-2">
                 {members.map(m => {
                   const checked = assignedToIds.includes(m.id)
@@ -514,7 +520,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
           {/* Stav */}
           <div>
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Stav</label>
-            {canEdit ? (
+            {canChangeStatus ? (
               <select value={status} onChange={e => setStatus(e.target.value as TaskStatus)} className={inputClass}>
                 {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
@@ -524,7 +530,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
           {/* Priorita */}
           <div>
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Priorita</label>
-            {canEdit ? (
+            {canFullEdit ? (
               <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className={inputClass}>
                 {Object.entries(PRIORITY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
@@ -536,7 +542,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">
               Termín {overdue && <span className="text-red-500 normal-case">· Po termínu</span>}
             </label>
-            {canEdit ? (
+            {canFullEdit ? (
               <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={inputClass} />
             ) : (
               <span className={`text-sm ${overdue ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-300'}`}>{formatDate(task.due_date)}</span>
@@ -546,7 +552,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
           {/* Cesta k souboru */}
           <div>
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Cesta k souboru</label>
-            {canEdit ? (
+            {canFullEdit ? (
               <input type="text" value={filePath} onChange={e => setFilePath(e.target.value)} placeholder="\\server\share\projekt" className={inputClass} />
             ) : task.file_path ? (
               <div className="flex items-center gap-2">
@@ -565,7 +571,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
         </div>
 
         {/* 3D Model / Annotation link */}
-        {canEdit ? (
+        {canFullEdit ? (
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Odkaz na 3D model</label>
@@ -633,7 +639,7 @@ function TaskDetailModal({ task, subprojects, members, projectId, onClose, onSav
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-        {canEdit && (
+        {(canChangeStatus || canFullEdit) && (
           <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-gray-800">
             {canDelete && (
               <Button variant="danger" size="sm" onClick={handleDelete}>Smazat úkol</Button>
@@ -1069,8 +1075,8 @@ function CreateTaskModal({ open, onClose, projectId, subprojects, members, defau
 
 // ── Sortable Task Row ─────────────────────────────────────────
 
-function SortableTaskRow({ task, admin, canEdit, selected, anySelected, members, currentUserId, onToggleSelect, onOpen, onDragSelectStart, onDragSelectEnter, onAssigneesChange, onSelfAssign, onStatusChange, onPriorityChange, onDueDateChange }: {
-  task: TaskWithRelations; admin: boolean; canEdit: boolean
+function SortableTaskRow({ task, admin, canEdit, canChangeStatus, selected, anySelected, members, currentUserId, onToggleSelect, onOpen, onDragSelectStart, onDragSelectEnter, onAssigneesChange, onSelfAssign, onStatusChange, onPriorityChange, onDueDateChange }: {
+  task: TaskWithRelations; admin: boolean; canEdit: boolean; canChangeStatus: boolean
   selected: boolean; anySelected: boolean
   members: Profile[]
   currentUserId: string
@@ -1151,7 +1157,7 @@ function SortableTaskRow({ task, admin, canEdit, selected, anySelected, members,
         })()}
       </td>
       <td className="px-3 py-2.5">
-        {canEdit ? (
+        {canChangeStatus ? (
           <InlineSelect<TaskStatus>
             value={task.status} options={STATUS_LABELS}
             onChange={val => onStatusChange(task.id, val)}
@@ -1277,7 +1283,8 @@ function TaskGroup({ group, admin, profile, members, selectedTaskIds, activeDrag
                 {group.tasks.map(task => (
                   <SortableTaskRow key={task.id} task={task}
                     admin={admin}
-                    canEdit={admin || task.assigned_to === profile?.id || (task.task_assignees ?? []).some(a => a.user_id === profile?.id)}
+                    canEdit={admin || task.created_by === profile?.id}
+                    canChangeStatus={admin || task.created_by === profile?.id || task.assigned_to === profile?.id || (task.task_assignees ?? []).some(a => a.user_id === profile?.id)}
                     selected={selectedTaskIds.has(task.id)}
                     anySelected={anySelected}
                     members={members}
