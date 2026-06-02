@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useConfirm } from '@/components/ui/ConfirmDialog'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { setBgModel } from '@/components/layout/BackgroundScene'
-import { Upload, X, Box, Trash2, FolderOpen, Monitor } from 'lucide-react'
+import { Upload, X, Box, Trash2, FolderOpen, Monitor, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ModelFile } from '@/lib/types'
 import { BUCKET } from './shared'
@@ -89,7 +89,9 @@ export function ModelsPage() {
   const [uploadFile, setUploadFile]       = useState<File | null>(null)
   const [assigningModelId, setAssigningModelId] = useState<string | null>(null)
   const [uploadProjectId, setUploadProjectId]   = useState('')
+  const [reuploadingId, setReuploadingId]       = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const reuploadRef = useRef<HTMLInputElement>(null)
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects_list_for_models'],
@@ -200,6 +202,46 @@ export function ModelsPage() {
     }
   }
 
+  async function handleReupload(model: ModelFile, file: File) {
+    setReuploadingId(model.id)
+    try {
+      const base = `${Date.now()}_${model.name.replace(/\s+/g, '_')}`
+      const ext = file.name.split('.').pop() ?? 'glb'
+      const newPath = `${base}.${ext}`
+
+      const { error: uploadErr } = await supabase.storage.from(BUCKET).upload(newPath, file)
+      if (uploadErr) throw uploadErr
+
+      let thumbnailPath: string | null = model.thumbnail_path ?? null
+      try {
+        const thumbBlob = await generateThumbnail(file)
+        const thumbPath = `thumbs/${base}.jpg`
+        const { error: thumbErr } = await supabase.storage.from(BUCKET).upload(thumbPath, thumbBlob, { contentType: 'image/jpeg' })
+        if (!thumbErr) {
+          if (model.thumbnail_path) await supabase.storage.from(BUCKET).remove([model.thumbnail_path])
+          thumbnailPath = thumbPath
+          localStorage.setItem(`thumb_v_${model.id}`, Date.now().toString())
+        }
+      } catch { /* thumbnail optional */ }
+
+      const { error: dbErr } = await supabase.from('model_files').update({
+        file_path: newPath,
+        file_size: file.size,
+        thumbnail_path: thumbnailPath,
+      }).eq('id', model.id)
+      if (dbErr) throw dbErr
+
+      await supabase.storage.from(BUCKET).remove([model.file_path])
+
+      qc.invalidateQueries({ queryKey: ['model_files'] })
+      toast.success('Model aktualizován — anotace a vegetace zůstaly zachovány')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Chyba při nahrávání')
+    } finally {
+      setReuploadingId(null)
+    }
+  }
+
   async function handleDelete(model: ModelFile) {
     if (!await confirm({ title: 'Smazat model', message: `Opravdu smazat model „${model.name}"? Tato akce je nevratná.`, confirmLabel: 'Smazat', variant: 'danger' })) return
     const filesToRemove = [model.file_path, ...(model.thumbnail_path ? [model.thumbnail_path] : [])]
@@ -290,6 +332,13 @@ export function ModelsPage() {
                               className={`p-1.5 rounded-md transition-all opacity-0 group-hover:opacity-100 ${model.project_id ? 'text-indigo-500 dark:text-indigo-400 opacity-100' : 'text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20'}`}>
                               <FolderOpen size={14} />
                             </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); reuploadRef.current?.setAttribute('data-model-id', model.id); reuploadRef.current?.click() }}
+                              title="Přenahrát model (zachová anotace a vegetaci)"
+                              disabled={reuploadingId === model.id}
+                              className="p-1.5 rounded-md text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-50">
+                              <RefreshCw size={14} className={reuploadingId === model.id ? 'animate-spin' : ''} />
+                            </button>
                             <button onClick={e => { e.stopPropagation(); handleDelete(model) }}
                               className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 opacity-0 group-hover:opacity-100 transition-all">
                               <Trash2 size={14} />
@@ -360,6 +409,21 @@ export function ModelsPage() {
           </div>
         </div>
       )}
+
+      <input
+        ref={reuploadRef}
+        type="file"
+        accept=".glb,.gltf"
+        className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0]
+          const modelId = reuploadRef.current?.getAttribute('data-model-id')
+          if (!file || !modelId) return
+          const model = models.find(m => m.id === modelId)
+          if (model) handleReupload(model, file)
+          e.target.value = ''
+        }}
+      />
 
       {viewerModel && (
         <Viewer
